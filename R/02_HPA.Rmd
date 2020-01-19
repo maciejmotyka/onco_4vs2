@@ -79,3 +79,54 @@ intersect(normal_data_for_down$gene, cancer_data_for_down$gene) %>% length()
 rm(normalFromHPA)
 rm(cancerFromHPA)
 ```
+
+## Check for differences in protein abundance between normal tissue and cancer
+### Define the comparison functions
+```{r}
+checkIfDownregulated <- function(tissue_type, cancer_type, normal_data, cancer_data){
+  
+  inner_join(normal_data, cancer_data, by = "gene") %>%
+    dplyr::select(gene, gene_name = gene_name.x, tissue, cancer, level, high:not_detected, n_samples) %>% 
+    mutate(samples_down = case_when(level == "High" ~ 0,
+                                   level == "Medium" ~ as.double(high),
+                                   level == "Low" ~ as.double(high+medium),
+                                   level == "Not detected" ~ as.double(high+medium+low))) %>% 
+    mutate(samples_down = case_when(level == "High" ~ as.double(medium+low+not_detected),
+                                   level == "Medium" ~ as.double(low+not_detected),
+                                   level == "Low" ~ as.double(not_detected),
+                                   level == "Not detected" ~ 0)) %>% 
+    mutate(samples_noChange = case_when(level == "High" ~ as.double(high),
+                                   level == "Medium" ~ as.double(medium),
+                                   level == "Low" ~ as.double(low),
+                                   level == "Not detected" ~ as.double(not_detected))) %>% 
+    filter(samples_down >= 0.5*n_samples) %>% 
+    filter(tissue == tissue_type) %>% 
+    filter(cancer == cancer_type) %>% 
+    dplyr::select(gene)
+    # dplyr::select(gene_name)
+}
+
+checkIfUpregulated <- function(tissue_type, cancer_type, normal_data, cancer_data){
+  
+  inner_join(normal_data, cancer_data, by = "gene") %>%
+    dplyr::select(gene, gene_name = gene_name.x, tissue, cancer, level, high:not_detected, n_samples) %>% 
+    mutate(samples_up = case_when(level == "High" ~ 0,
+                                   level == "Medium" ~ as.double(high),
+                                   level == "Low" ~ as.double(high+medium),
+                                   level == "Not detected" ~ as.double(high+medium+low))) %>% 
+    mutate(samples_down = case_when(level == "High" ~ as.double(medium+low+not_detected),
+                                   level == "Medium" ~ as.double(low+not_detected),
+                                   level == "Low" ~ as.double(not_detected),
+                                   level == "Not detected" ~ 0)) %>% 
+    mutate(samples_noChange = case_when(level == "High" ~ as.double(high),
+                                   level == "Medium" ~ as.double(medium),
+                                   level == "Low" ~ as.double(low),
+                                   level == "Not detected" ~ as.double(not_detected))) %>% 
+    filter(samples_up >= 0.5*n_samples) %>% 
+    filter(tissue == tissue_type) %>% 
+    filter(cancer == cancer_type) %>%
+    dplyr::select("gene")
+    # dplyr::select("gene_name")
+}
+```
+
