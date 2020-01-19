@@ -1,0 +1,17 @@
+---
+title: "Network enrichment with NEArender"
+output:
+  html_notebook:
+    code_folding: show
+editor_options:
+  chunk_output_type: console
+---
+# {.tabset .tabset-fade .tabset-pills}
+
+## Setup
+### Load libraries
+```{r}
+library(here)
+library(tidyverse)
+library(tidylog)
+```
