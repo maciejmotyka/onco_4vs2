@@ -83,32 +83,6 @@ rm(cancerFromHPA)
 ## Check for differences in protein abundance between normal tissue and cancer
 ### Define the comparison functions
 ```{r}
-checkIfDownregulated <- function(tissue_type,
-                                 cancer_type,
-                                 normal_data = normal_data_for_down, 
-                                 cancer_data = normal_data_for_down)
-  {
-  inner_join(normal_data, cancer_data, by = "gene") %>%
-    dplyr::select(gene, gene_name = gene_name.x, tissue, cancer, level, high:not_detected, n_samples) %>% 
-    mutate(samples_down = case_when(level == "High" ~ 0,
-                                   level == "Medium" ~ as.double(high),
-                                   level == "Low" ~ as.double(high+medium),
-                                   level == "Not detected" ~ as.double(high+medium+low))) %>% 
-    mutate(samples_down = case_when(level == "High" ~ as.double(medium+low+not_detected),
-                                   level == "Medium" ~ as.double(low+not_detected),
-                                   level == "Low" ~ as.double(not_detected),
-                                   level == "Not detected" ~ 0)) %>% 
-    mutate(samples_noChange = case_when(level == "High" ~ as.double(high),
-                                   level == "Medium" ~ as.double(medium),
-                                   level == "Low" ~ as.double(low),
-                                   level == "Not detected" ~ as.double(not_detected))) %>% 
-    filter(samples_down >= 0.5*n_samples) %>% 
-    filter(tissue == tissue_type) %>% 
-    filter(cancer == cancer_type) %>% 
-    dplyr::select(gene)
-    # dplyr::select(gene_name)
-}
-
 checkIfUpregulated <- function(tissue_type,
                                cancer_type,
                                normal_data = normal_data_for_up,
@@ -133,6 +107,32 @@ checkIfUpregulated <- function(tissue_type,
     filter(cancer == cancer_type) %>%
     dplyr::select("gene")
     # dplyr::select("gene_name")
+}
+
+checkIfDownregulated <- function(tissue_type,
+                                 cancer_type,
+                                 normal_data = normal_data_for_down, 
+                                 cancer_data = cancer_data_for_down)
+  {
+  inner_join(normal_data, cancer_data, by = "gene") %>%
+    dplyr::select(gene, gene_name = gene_name.x, tissue, cancer, level, high:not_detected, n_samples) %>% 
+    mutate(samples_down = case_when(level == "High" ~ 0,
+                                   level == "Medium" ~ as.double(high),
+                                   level == "Low" ~ as.double(high+medium),
+                                   level == "Not detected" ~ as.double(high+medium+low))) %>% 
+    mutate(samples_down = case_when(level == "High" ~ as.double(medium+low+not_detected),
+                                   level == "Medium" ~ as.double(low+not_detected),
+                                   level == "Low" ~ as.double(not_detected),
+                                   level == "Not detected" ~ 0)) %>% 
+    mutate(samples_noChange = case_when(level == "High" ~ as.double(high),
+                                   level == "Medium" ~ as.double(medium),
+                                   level == "Low" ~ as.double(low),
+                                   level == "Not detected" ~ as.double(not_detected))) %>% 
+    filter(samples_down >= 0.5*n_samples) %>% 
+    filter(tissue == tissue_type) %>% 
+    filter(cancer == cancer_type) %>% 
+    dplyr::select(gene)
+    # dplyr::select(gene_name)
 }
 ```
 
@@ -161,9 +161,38 @@ venn_up <- gplots::venn(
 )
 
 common_up <- attr(venn_up, "intersections")$`BRCA:COADREAD:LUAD:PRAD`
-  # 13 genes common to all cancers
+  # 13 proteins up-regulated in all 4 cancers
 bind_rows(breast_up, colorectal_up, lung_up, prostate_up) %>% distinct() %>% count()
-  # there are 178 uniqe up-regulated genes
+  # there are 178 uniqe up-regulated proteins
+```
+
+### Check for down-regulation
+```{r}
+breast_down <- checkIfDownregulated(tissue_type = "breast", cancer_type = "breast") # 239
+prostate_down <- checkIfDownregulated(tissue_type = "prostate", cancer_type = "prostate") # 265
+lung_down <- checkIfDownregulated(tissue_type = "lung", cancer_type = "lung") # 218
+colon_down <- checkIfDownregulated(tissue_type = "colon", cancer_type = "colorectal") # 305
+rectum_down <- checkIfDownregulated(tissue_type = "rectum", cancer_type = "colorectal") # 319
+
+colorectal_down <- intersect(colon_down, rectum_down) # 258
+rm(colon_down)
+rm(rectum_down)
+```
+
+```{r warning=F}
+venn_down <- gplots::venn(
+  list(
+    "BRCA" = breast_down,
+    "COADREAD" = colorectal_down,
+    "LUAD" = lung_down,
+    "PRAD" = prostate_down
+  )
+)
+
+common_down <- attr(venn_down, "intersections")$`BRCA:COADREAD:LUAD:PRAD`
+  # 29 proteins down-regulated in all 4 cancers
+bind_rows(breast_down, colorectal_down, lung_down, prostate_down) %>% distinct() %>% count()
+  # there are 552 uniqe down-regulated proteins 
 ```
 
 
