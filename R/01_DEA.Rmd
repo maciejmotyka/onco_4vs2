@@ -1,0 +1,117 @@
+---
+title: "DEA w DESeq2 on the counts from recount2"
+output:
+  html_notebook:
+    code_folding: show
+editor_options:
+  chunk_output_type: console
+---
+# {.tabset .tabset-fade .tabset-pills}
+
+## Setup
+### Load libraries
+```{r}
+library(here)
+library(tidyverse)
+library(tidylog)
+```
+
+### Download and read in the gene counts from recount2
+```{r}
+recount2_url <- "http://duffel.rail.bio/recount/v2/SRP019968/counts_gene.tsv.gz"
+destfile <- here("data", "SRP019968_recount2_gene_counts.tsv.gz")
+
+if (!file.exists(destfile)) {
+  download.file(url = recount2_url, destfile = destfile)
+}
+
+recount2_counts <- read_tsv(here("data", "SRP019968_recount2_gene_counts.tsv.gz"),
+                            col_names = T)
+```
+
+## Data prep
+### Keep only protein-coding genes using biomaRt
+```{r}
+## Extract ensembl ids from recount2 data
+recount2_counts <- recount2_counts %>% 
+  ## remove duplicate genes that can be found either on chromosome X or Y
+  filter_at(vars(gene_id), ~str_detect(., "PAR_Y", negate = T)) %>% 
+  ## remove the version part of the Ensembl ids
+  mutate(gene_id = str_remove(gene_id, "\\.\\w*$"))
+
+recount2_ensg_ids <- recount2_counts %>% dplyr::select(gene_id)
+
+## Query the Ensembl Biomart for protein coding genes
+hsapiens_gene_ensembl = biomaRt::useMart(biomart = "ensembl", dataset = "hsapiens_gene_ensembl")
+
+protein_coding <- biomaRt::getBM(attributes=c("ensembl_gene_id",
+                                              "entrezgene_id",
+                                              "entrezgene_accession",
+                                              "hgnc_symbol"
+                                              ),
+                                 filters = c("ensembl_gene_id","biotype"),
+                                 values=list(purrr::as_vector(recount2_ensg_ids),
+                                             "protein_coding"),
+                                 mart = hsapiens_gene_ensembl)
+
+
+## Keep only the counts for protein coding genes
+counts_pcoding <- recount2_counts %>% 
+  semi_join(distinct(protein_coding, ensembl_gene_id), 
+            by = c("gene_id" = "ensembl_gene_id"))
+
+## clean up
+# rm(ensembl)
+# rm(protein_coding)
+```
+
+### How many protein-coding genes were detected?
+```{r}
+counts_pcoding %>% select(SRR837858, SRR837859) %>% filter_all(all_vars(. > 0)) %>% nrow() # 14941; 12493 in text
+counts_pcoding %>% select(SRR837860, SRR837861) %>% filter_all(all_vars(. > 0)) %>% nrow() # 14540; 12173 in text
+counts_pcoding %>% select(SRR837862, SRR837863) %>% filter_all(all_vars(. > 0)) %>% nrow() # 14548; 12246 in text
+counts_pcoding %>% select(SRR837864, SRR837865) %>% filter_all(all_vars(. > 0)) %>% nrow() # 14543; 12074 in text
+```
+
+## DEA
+### Prepare a count matrix for DESeq2
+```{r}
+count_matrix <- counts_pcoding %>% column_to_rownames("gene_id")
+```
+
+### Prepare column metadata for DESeq2
+```{r}
+col_data <- data.frame(row.names = colnames(count_matrix),
+                            "lane" = rep(c("a", "b")),
+                            "stage" = factor(rep(c("primary", "hTERT", "SV40", "RAS"),
+                                                 each = 2)))
+
+## Verify that col_data and count_matrix match
+all(rownames(col_data) == colnames(count_matrix))
+```
+
+### Create DESeq object
+```{r}
+dds <- DESeq2::DESeqDataSetFromMatrix(countData = count_matrix,
+                                      colData = col_data,
+                                      design = ~ lane + stage)
+
+dds$stage <- factor(dds$stage, levels = c("primary", "hTERT", "SV40", "RAS"))
+```
+
+### Perform the DEA
+```{r}
+dds <- DESeq2::DESeq(dds)
+```
+
+### Extract the DEGs for metastasizing (RAS) vs immortalized (hTERT) fibroblasts contrast
+```{r}
+res4vs2 <- DESeq2::results(dds, contrast = c("stage", "RAS", "hTERT"), lfcThreshold = 1, alpha = 0.01)
+DESeq2::summary(res4vs2)
+  # 639 up-regulated, 1329 down-regulated, 1968 total
+
+degs_4vs2 <- data.frame(res4vs2) %>% rownames_to_column("gene_id") %>% filter(padj < 0.01)
+```
+
+
+
