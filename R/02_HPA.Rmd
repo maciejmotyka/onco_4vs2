@@ -149,7 +149,7 @@ rm(colon_up)
 rm(rectum_up)
 ```
 
-### Make Venn diagram
+### Create a Venn diagram of up-regulated genes
 ```{r warning=F}
 venn_up <- gplots::venn(
   list(
@@ -179,6 +179,7 @@ rm(colon_down)
 rm(rectum_down)
 ```
 
+### Create a Venn diagram of down-regulated genes
 ```{r warning=F}
 venn_down <- gplots::venn(
   list(
@@ -195,5 +196,31 @@ bind_rows(breast_down, colorectal_down, lung_down, prostate_down) %>% distinct()
   # there are 552 uniqe down-regulated proteins 
 ```
 
+## Create Venn diagram for all DEGs
+```{r warning=F}
+degs_breast <- bind_rows(breast_up, breast_down)
+degs_colorectal <- bind_rows(colorectal_up, colorectal_down)
+degs_lung <- bind_rows(lung_up, lung_down)
+degs_prostate <- bind_rows(prostate_up, prostate_down)
 
+venn_all_degs <- gplots::venn(list("BRCA" = degs_breast,
+                                   "COADREAD" = degs_colorectal,
+                                   "LUAD" = degs_lung,
+                                   "PRAD" = degs_prostate))
+
+common_degs_ensg <- attr(venn_all_degs, "intersections")$`BRCA:COADREAD:LUAD:PRAD`
+```
+
+## Map Ensembl ids to gene symbols
+```{r}
+library("org.Hs.eg.db")
+common_degs_symbols <- AnnotationDbi::mapIds(org.Hs.eg.db, keys = common_degs_ensg, keytype = "ENSEMBL", column = "SYMBOL", multiVals = "first")
+```
+
+## Check if any of the genes are in the Cancer Gene Census
+```{r}
+cgc <- read_tsv(here("data", "Census_allSun Jan 19 20_33_11 2020.tsv"))
+
+cgc %>% filter_at("Gene Symbol", any_vars(. %in% common_degs_symbols)) # CD74, PBX1
+```
 
