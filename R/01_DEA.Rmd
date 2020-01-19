@@ -59,10 +59,6 @@ protein_coding <- biomaRt::getBM(attributes=c("ensembl_gene_id",
 counts_pcoding <- recount2_counts %>% 
   semi_join(distinct(protein_coding, ensembl_gene_id), 
             by = c("gene_id" = "ensembl_gene_id"))
-
-## clean up
-# rm(ensembl)
-# rm(protein_coding)
 ```
 
 ### How many protein-coding genes were detected?
@@ -113,5 +109,9 @@ DESeq2::summary(res4vs2)
 degs_4vs2 <- data.frame(res4vs2) %>% rownames_to_column("gene_id") %>% filter(padj < 0.01)
 ```
 
+## Clean up
+```{r}
+varhandle::rm.all.but(keep = c("degs_4vs2", "protein_coding"))
+```
 
 
