@@ -5,3 +5,4 @@ packrat/lib*/
 packrat/lib*
 packrat/src
 data/
+R/*.nb.html
