@@ -26,7 +26,7 @@ if(!file.exists(file)){
   download.file(url = url, destfile = file)
 }
 
-normalFromHPA <- read_tsv(file) %>%
+HPA_normal <- read_tsv(file) %>%
   janitor::clean_names()
 
 ## Pathology
@@ -36,8 +36,46 @@ file <- here("data", "hpa-cancer.tsv.zip")
 if(!file.exists(file)){
 download.file(url = url, destfile = file)
 }
-cancerFromHPA <- read_tsv(file) %>%
+HPA_pathology <- read_tsv(file) %>%
   janitor::clean_names()
 
 rm(url); rm(file)
+```
+
+## Filter the HPA by tissue, cell type and the up- or down-regulated genes
+```{r}
+filterNormal <- function(genes, normal_data){
+  normal_data %>%
+  filter(tissue %in% c("rectum", "colon", "prostate", "breast", "lung")) %>%
+  filter(cell_type %in% c("glandular cells", "pneumocytes")) %>%
+  filter(gene %in% genes)
+}
+
+filterCancer <- function(genes, cancer_data){
+  cancer_data %>%
+  select(gene:not_detected) %>% 
+  mutate(cancer = str_remove(cancer, pattern = " cancer")) %>% 
+  filter(cancer %in% c("colorectal",
+                       "prostate",
+                       "breast",
+                       "lung")) %>% 
+  filter(gene %in% genes) %>%
+  drop_na(high:not_detected) %>%
+  mutate(n_samples = rowSums(select(., high:not_detected)))
+}
+  
+degs_4vs2_up <- degs_4vs2 %>% filter(log2FoldChange >= 1)
+normal_data_for_up <- filterNormal(genes = degs_4vs2_up$gene_id, normal_data = HPA_normal)
+cancer_data_for_up <- filterCancer(genes = degs_4vs2_up$gene_id, cancer_data = HPA_pathology)
+intersect(normal_data_for_up$gene, cancer_data_for_up$gene) %>% length()
+  # 446 of 639 up-regulated genes have normal and pathology data
+
+degs_4vs2_down <- degs_4vs2 %>% filter(log2FoldChange <= -1)
+normal_data_for_down <- filterNormal(genes = degs_4vs2_down$gene_id, normal_data = HPA_normal)
+cancer_data_for_down <- filterCancer(genes = degs_4vs2_down$gene_id, cancer_data = HPA_pathology)
+intersect(normal_data_for_down$gene, cancer_data_for_down$gene) %>% length()
+  # 949 of 1329 down-regulated genes have normal and pathology data
+
+rm(normalFromHPA)
+rm(cancerFromHPA)
 ```
