@@ -83,8 +83,11 @@ rm(cancerFromHPA)
 ## Check for differences in protein abundance between normal tissue and cancer
 ### Define the comparison functions
 ```{r}
-checkIfDownregulated <- function(tissue_type, cancer_type, normal_data, cancer_data){
-  
+checkIfDownregulated <- function(tissue_type,
+                                 cancer_type,
+                                 normal_data = normal_data_for_down, 
+                                 cancer_data = normal_data_for_down)
+  {
   inner_join(normal_data, cancer_data, by = "gene") %>%
     dplyr::select(gene, gene_name = gene_name.x, tissue, cancer, level, high:not_detected, n_samples) %>% 
     mutate(samples_down = case_when(level == "High" ~ 0,
@@ -106,8 +109,11 @@ checkIfDownregulated <- function(tissue_type, cancer_type, normal_data, cancer_d
     # dplyr::select(gene_name)
 }
 
-checkIfUpregulated <- function(tissue_type, cancer_type, normal_data, cancer_data){
-  
+checkIfUpregulated <- function(tissue_type,
+                               cancer_type,
+                               normal_data = normal_data_for_up,
+                               cancer_data = cancer_data_for_up)
+  {
   inner_join(normal_data, cancer_data, by = "gene") %>%
     dplyr::select(gene, gene_name = gene_name.x, tissue, cancer, level, high:not_detected, n_samples) %>% 
     mutate(samples_up = case_when(level == "High" ~ 0,
@@ -129,4 +135,36 @@ checkIfUpregulated <- function(tissue_type, cancer_type, normal_data, cancer_dat
     # dplyr::select("gene_name")
 }
 ```
+
+### Check for up-regulation
+```{r}
+breast_up <- checkIfUpregulated(tissue_type = "breast", cancer_type = "breast") # 64
+prostate_up <- checkIfUpregulated(tissue_type = "prostate", cancer_type = "prostate") # 72
+lung_up <- checkIfUpregulated(tissue_type = "lung", cancer_type = "lung") # 104
+colon_up <- checkIfUpregulated(tissue_type = "colon", cancer_type = "colorectal") # 66
+rectum_up <- checkIfUpregulated(tissue_type = "rectum", cancer_type = "colorectal") # 64
+
+colorectal_up <- intersect(colon_up, rectum_up) # 54
+rm(colon_up)
+rm(rectum_up)
+```
+
+### Make Venn diagram
+```{r warning=F}
+venn_up <- gplots::venn(
+  list(
+    "BRCA" = breast_up,
+    "COADREAD" = colorectal_up,
+    "LUAD" = lung_up,
+    "PRAD" = prostate_up
+  )
+)
+
+common_up <- attr(venn_up, "intersections")$`BRCA:COADREAD:LUAD:PRAD`
+  # 13 genes common to all cancers
+bind_rows(breast_up, colorectal_up, lung_up, prostate_up) %>% distinct() %>% count()
+  # there are 178 uniqe up-regulated genes
+```
+
+
 
