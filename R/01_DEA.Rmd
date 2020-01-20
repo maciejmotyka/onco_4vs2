@@ -112,6 +112,7 @@ degs_4vs2 <- data.frame(res4vs2) %>% rownames_to_column("gene_id") %>% filter(pa
 ## Clean up
 ```{r}
 varhandle::rm.all.but(keep = c("degs_4vs2", "protein_coding"))
+varhandle::save.var(path = here("analysis"), varlist = c("degs_4vs2", "protein_coding"))
 ```
 
 
