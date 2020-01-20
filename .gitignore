@@ -7,3 +7,4 @@ packrat/src
 data/
 R/*.nb.html
 *.pdf
+output/
