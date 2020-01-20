@@ -6,3 +6,4 @@ packrat/lib*
 packrat/src
 data/
 R/*.nb.html
+*.pdf
