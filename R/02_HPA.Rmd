@@ -145,20 +145,15 @@ colon_up <- checkIfUpregulated(tissue_type = "colon", cancer_type = "colorectal"
 rectum_up <- checkIfUpregulated(tissue_type = "rectum", cancer_type = "colorectal") # 64
 
 colorectal_up <- intersect(colon_up, rectum_up) # 54
-rm(colon_up)
-rm(rectum_up)
 ```
 
 ### Create a Venn diagram of up-regulated genes
 ```{r warning=F}
 venn_up <- gplots::venn(
-  list(
-    "BRCA" = breast_up,
-    "COADREAD" = colorectal_up,
-    "LUAD" = lung_up,
-    "PRAD" = prostate_up
-  )
-)
+  list("BRCA" = breast_up,
+       "COADREAD" = colorectal_up,
+       "LUAD" = lung_up,
+       "PRAD" = prostate_up))
 
 common_up <- attr(venn_up, "intersections")$`BRCA:COADREAD:LUAD:PRAD`
   # 13 proteins up-regulated in all 4 cancers
@@ -175,20 +170,15 @@ colon_down <- checkIfDownregulated(tissue_type = "colon", cancer_type = "colorec
 rectum_down <- checkIfDownregulated(tissue_type = "rectum", cancer_type = "colorectal") # 319
 
 colorectal_down <- intersect(colon_down, rectum_down) # 258
-rm(colon_down)
-rm(rectum_down)
 ```
 
 ### Create a Venn diagram of down-regulated genes
 ```{r warning=F}
 venn_down <- gplots::venn(
-  list(
-    "BRCA" = breast_down,
-    "COADREAD" = colorectal_down,
-    "LUAD" = lung_down,
-    "PRAD" = prostate_down
-  )
-)
+  list("BRCA" = breast_down,
+       "COADREAD" = colorectal_down,
+       "LUAD" = lung_down,
+       "PRAD" = prostate_down))
 
 common_down <- attr(venn_down, "intersections")$`BRCA:COADREAD:LUAD:PRAD`
   # 29 proteins down-regulated in all 4 cancers
@@ -203,12 +193,31 @@ degs_colorectal <- bind_rows(colorectal_up, colorectal_down)
 degs_lung <- bind_rows(lung_up, lung_down)
 degs_prostate <- bind_rows(prostate_up, prostate_down)
 
-venn_all_degs <- gplots::venn(list("BRCA" = degs_breast,
-                                   "COADREAD" = degs_colorectal,
-                                   "LUAD" = degs_lung,
-                                   "PRAD" = degs_prostate))
+venn_all_degs <- gplots::venn(
+  list("BRCA" = degs_breast,
+       "COADREAD" = degs_colorectal,
+       "LUAD" = degs_lung,
+       "PRAD" = degs_prostate))
 
 common_degs_ensg <- attr(venn_all_degs, "intersections")$`BRCA:COADREAD:LUAD:PRAD`
+```
+
+## Place the Venn diagrams on one figure
+```{r}
+# grDevices::pdf(file="saving_plot.pdf")
+graphics::par(mfrow = c(2,2), mai = c(0,0,0.2,0), cex = 0.7, oma = c(0, 0, 4, 0))
+graphics::par(mar = c(0,0,2,0))
+graphics::plot(venn_up)
+graphics::title(main = "up-regulated")
+graphics::par(mar = c(0,0,2,0))
+graphics::plot(venn_down)
+graphics::title(main = "down-regulated")
+graphics::par(mar = c(0,0,1,0))
+graphics::par(mar = c(0,0,1,0), fig=c(0,0.7,0,0))
+graphics::plot(venn_all_degs)
+graphics::title(main = "all DEGs")
+graphics::mtext("Overlap between differentially expressed genes", outer = T, cex = 1, padj = -2)
+# grDevices::dev.off()
 ```
 
 ## Map Ensembl ids to gene symbols
