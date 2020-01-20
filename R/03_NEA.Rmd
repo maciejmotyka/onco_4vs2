@@ -15,3 +15,24 @@ library(here)
 library(tidyverse)
 library(tidylog)
 ```
+
+## Prepare AGS with Entrez ids
+```{r}
+## retrieve mapping
+ags_ensg2entrez <- 
+  all_degs_HPA$gene %>%
+  AnnotationDbi::mapIds(keytype = "ENSEMBL",
+                        column = "ENTREZID",
+                        x = org.Hs.eg.db,
+                        multiVals = "first") %>%
+  enframe("ensg", "entrez_id") %>%
+  filter(!duplicated(.$ensg))
+
+n_distinct(all_degs_HPA$gene) # 730
+
+## map the ids and construct the AGS object
+ags_4vs2 <- all_degs_HPA %>%
+  full_join(ags_ensg2entrez, by = c("gene" = "ensg")) %>%
+  as.data.frame() %>%
+  NEArender::import.gs(gs.type = "a", col.gene = 5, col.set = 1, Lowercase = F)
+```
