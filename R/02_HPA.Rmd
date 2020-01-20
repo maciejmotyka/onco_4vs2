@@ -51,7 +51,7 @@ filterNormal <- function(genes, normal_data){
 
 filterCancer <- function(genes, cancer_data){
   cancer_data %>%
-  select(gene:not_detected) %>% 
+  dplyr::select(gene:not_detected) %>% 
   mutate(cancer = str_remove(cancer, pattern = " cancer")) %>% 
   filter(cancer %in% c("colorectal",
                        "prostate",
@@ -59,20 +59,22 @@ filterCancer <- function(genes, cancer_data){
                        "lung")) %>% 
   filter(gene %in% genes) %>%
   drop_na(high:not_detected) %>%
-  mutate(n_samples = rowSums(select(., high:not_detected)))
+  mutate(n_samples = rowSums(dplyr::select(., high:not_detected)))
 }
-  
+
+## Filter the up-regulated genes
 degs_4vs2_up <- degs_4vs2 %>% filter(log2FoldChange >= 1)
 normal_data_for_up <- filterNormal(genes = degs_4vs2_up$gene_id, normal_data = HPA_normal)
 cancer_data_for_up <- filterCancer(genes = degs_4vs2_up$gene_id, cancer_data = HPA_pathology)
-intersect(normal_data_for_up$gene, cancer_data_for_up$gene) %>% length()
-  # 446 of 639 up-regulated genes have normal and pathology data
+## How many up-regulated genes have normal and pathology data in HPA?
+intersect(normal_data_for_up$gene, cancer_data_for_up$gene) %>% length() # 446 of 639
 
+## Filter the down-regulated genes
 degs_4vs2_down <- degs_4vs2 %>% filter(log2FoldChange <= -1)
 normal_data_for_down <- filterNormal(genes = degs_4vs2_down$gene_id, normal_data = HPA_normal)
 cancer_data_for_down <- filterCancer(genes = degs_4vs2_down$gene_id, cancer_data = HPA_pathology)
-intersect(normal_data_for_down$gene, cancer_data_for_down$gene) %>% length()
-  # 949 of 1329 down-regulated genes have normal and pathology data
+## How many of the down-regulated genes have normal and pathology data in HPA?
+intersect(normal_data_for_down$gene, cancer_data_for_down$gene) %>% length()# 949 of 1329
 ```
 
 ## Check for differences in protein abundance between normal tissue and cancer
@@ -181,20 +183,33 @@ bind_rows(breast_down, colorectal_down, lung_down, prostate_down) %>% distinct()
   # there are 552 uniqe down-regulated proteins 
 ```
 
-## Create Venn diagram for all DEGs
-```{r warning=F}
-degs_breast <- bind_rows(breast_up, breast_down)
-degs_colorectal <- bind_rows(colorectal_up, colorectal_down)
-degs_lung <- bind_rows(lung_up, lung_down)
-degs_prostate <- bind_rows(prostate_up, prostate_down)
+### Create a dataframe with all DEGs
+```{r}
+degs_breast <-
+  list("up" = breast_up, "down" = breast_down) %>% bind_rows(.id = "change")
+degs_colorectal <-
+  list("up" = colorectal_up, "down" = colorectal_down) %>% bind_rows(.id = "change")
+degs_lung <-
+  list("up" = lung_up, "down" = lung_down) %>% bind_rows(.id = "change")
+degs_prostate <-
+  list("up" = prostate_up, "down" = prostate_down) %>% bind_rows(.id = "change")
 
+all_degs_HPA <- list("BRCA" = degs_breast,
+                     "COADREAD" = degs_colorectal,
+                     "LUAD" = degs_lung,
+                     "PRAD" = degs_prostate) %>%
+  bind_rows(.id = "cancer")
+```
+
+### Create Venn diagram for all DEGs
+```{r warning=F}
 venn_all_degs <- gplots::venn(
   list("BRCA" = degs_breast$gene_name,
        "COADREAD" = degs_colorectal$gene_name,
        "LUAD" = degs_lung$gene_name,
        "PRAD" = degs_prostate$gene_name))
 
-common_degs_ensg <- attr(venn_all_degs, "intersections")$`BRCA:COADREAD:LUAD:PRAD`
+common_degs <- attr(venn_all_degs, "intersections")$`BRCA:COADREAD:LUAD:PRAD`
 ```
 
 ## Place the 3 Venn diagrams on one figure
@@ -218,7 +233,7 @@ grDevices::dev.off()
 ```{r}
 cgc <- read_tsv(here("data", "Census_allSun Jan 19 20_33_11 2020.tsv"))
 
-cgc %>% filter_at("Gene Symbol", any_vars(. %in% common_degs_symbols)) # CD74, PBX1
+cgc %>% filter_at("Gene Symbol", any_vars(. %in% common_degs)) # CD74, PBX1
 ```
 
 ## Save the DEGs to a .tsv file
@@ -237,5 +252,11 @@ rowr::cbind.fill(breast_up$gene_name,
   setNames(str_c(c("brca", "coadread", "luad", "prad", "common"),
                  c(rep("_up", 5), rep("_down", 5)))) %>%
   write_tsv(here("output", "4vs2_DEGs_after_HPA.tsv"))
+```
+
+## Clean up
+```{r}
+varhandle::rm.all.but(keep = c("all_degs_HPA", "protein_coding"), keep_functions = F)
+varhandle::save.var(path = here("analysis"), varlist = "all_degs_HPA")
 ```
 
