@@ -36,3 +36,46 @@ ags_4vs2 <- all_degs_HPA %>%
   as.data.frame() %>%
   NEArender::import.gs(gs.type = "a", col.gene = 5, col.set = 1, Lowercase = F)
 ```
+
+## Prepare FGS with Entrez ids
+### Reactome 
+```{r}
+## download and clean Reactome gene:pathway file with Entrez ids
+url = "https://reactome.org/download/current/NCBI2Reactome_All_Levels.txt"
+file = here("data", "NCBI2Reactome_All_Levels.txt")
+
+if(!file.exists(file)){
+  download.file(url = url, destfile = file)
+}
+
+reactome71_entrez <- 
+  read_tsv(file = file,
+           col_names = c("entrezId", "reactomePathwayId", "url", "eventName", "evidenceCode", "species"),
+           col_types = cols("entrezId" = col_character())) %>% 
+  filter(species == "Homo sapiens") %>%
+  unite("pathway", reactomePathwayId, eventName, sep = "_") %>%
+  dplyr::select(entrezId, pathway)
+
+n_distinct(reactome71_entrez$entrezId) # 10881
+n_distinct(reactome71_entrez$pathway) # 2309
+
+## create an FGS object
+fgs_react71_entrez <- reactome71_entrez %>% 
+  as.data.frame() %>%
+  NEArender::import.gs(gs.type = "f", col.gene = 1, col.set = 2, Lowercase = F)
+
+## Create a gmt file to use with Sumer's Affinity Propagation
+react_gmt_3col <- reactome71_entrez %>%
+  group_by(pathway) %>% 
+  mutate(genes = str_c(entrezId, collapse = ",")) %>% 
+  distinct(pathway, genes) %>% 
+  separate(pathway, into = c("pathway_id", "pathway_name"), sep = "_", extra = "merge")
+  
+## Save the gmt file
+react_gmt_3col %>%
+  write_tsv(
+    here("analysis", "full_gmts_entrez", "react_entrez_full.gmt"),
+    na = "",
+    col_names = F
+)
+```
