@@ -79,3 +79,33 @@ react_gmt_3col %>%
     col_names = F
 )
 ```
+
+### KEGG
+```{r}
+## Read and clean gmt file prepared by prepare_database function from geneSCF
+## TODO: include the modified update_KEGG.sh script or rewrite it here 
+kegg_gmt_3col <- read_tsv(here("data", "kegg_genescf_2020-01-08.gmt"),
+                 col_names = c("pathway", "genes"),
+                 col_types = cols(.default = "c")) %>% 
+  separate(pathway, into = c("pathway_id", "pathway_name"), sep = "~") %>% 
+  mutate(pathway_name = str_remove(pathway_name, fixed("_-_Homo_sapiens_(human)"))) %>% 
+  mutate(pathway_name = str_replace_all(pathway_name, "_", " ")) 
+
+nrow(kegg_gmt_3col) # 336 pathways
+
+## Merge pathway ids with pathway names and cast the dataframe into a long format
+kegg_long <- kegg_gmt_3col%>% 
+  unite("pathway", pathway_id, pathway_name, sep = "_") %>% 
+  splitstackshape::cSplit("genes", sep = ",", direction = "long", type.convert = F)
+
+## Create an FGS object
+fgs_kegg_entrez <- kegg_long %>%
+  NEArender::import.gs(gs.type = "f", col.gene = 2, col.set = 1, Lowercase = F)
+
+## Save the gmt file
+kegg_gmt_3col %>% write_tsv(
+  here("analysis", "full_gmts_entrez", "kegg_entrez_full.gmt"),
+  na = "",
+  col_names = F
+)
+```
