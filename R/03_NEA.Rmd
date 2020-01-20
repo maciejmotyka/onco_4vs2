@@ -109,3 +109,42 @@ kegg_gmt_3col %>% write_tsv(
   col_names = F
 )
 ```
+
+### WikiPathways
+```{r}
+## download current gmt file from WP
+file <- here("data", "wikipathways-20200110-gmt-Homo_sapiens.gmt")
+
+if(!file.exists(file)){
+  rWikiPathways::downloadPathwayArchive(organism = "Homo sapiens", format = "gmt", destpath = here("data"), date = "current") 
+}
+
+## clean the gmt file to contain 3 columns
+wp_gmt_3col <- read_table(file, col_names = F) %>% 
+  separate(X1, into = c("X1", "url", "genes"), sep = "\t", extra = "merge") %>% 
+  separate(X1, into = c("pathway_name", "db_version", "pathway_id", "species"), sep = "%") %>% 
+  dplyr::select(pathway_name, pathway_id, genes) %>% 
+  mutate(genes = str_replace_all(genes, pattern = "\t", replacement = ","))
+
+n_distinct(wp_gmt_3col$pathway_id) # 565
+
+## Merge pathway ids with pathway names and cast the dataframe into a long format
+wp_long <- wp_gmt_3col %>% 
+  unite("pathway", pathway_id, pathway_name, sep = "_") %>% 
+  splitstackshape::cSplit("genes", sep = "\t", direction = "long", type.convert = F)
+
+## Create an FGS object
+fgs_wp_entrez <- wp_long %>%
+  NEArender::import.gs(gs.type = "f", col.set = 1, col.gene = 2, Lowercase = F)
+
+## Create gmt file to use with Sumer
+wp_gmt <- wp_gmt_3col %>% 
+  splitstackshape::cSplit("genes", sep = "\t", direction = "wide", type.convert = F)
+
+## Save the gmt file
+wp_gmt %>% write_tsv(
+  here("analysis", "full_gmts_entrez", "wp_entrez_full.gmt"),
+  na = "",
+  col_names = F
+)
+```
