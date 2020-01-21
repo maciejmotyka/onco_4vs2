@@ -9,11 +9,19 @@ editor_options:
 # {.tabset .tabset-fade .tabset-pills}
 
 ## Setup
-### Load libraries
+### Load libraries and resolve conflicts
 ```{r}
 library(here)
 library(tidyverse)
 library(tidylog)
+conflicted::conflict_prefer("filter", "tidylog")
+conflicted::conflict_prefer("select", "tidylog")
+conflicted::conflict_prefer("drop_na", "tidylog")
+conflicted::conflict_prefer("filter_all", "tidylog")
+conflicted::conflict_prefer("full_join", "tidylog")
+conflict_prefer("mutate", "tidylog")
+conflict_prefer("distinct", "tidylog")
+conflict_prefer("filter_at", "tidylog")
 ```
 
 ## Prepare AGS with Entrez ids
@@ -54,7 +62,7 @@ reactome71_entrez <-
            col_types = cols("entrezId" = col_character())) %>% 
   filter(species == "Homo sapiens") %>%
   unite("pathway", reactomePathwayId, eventName, sep = "_") %>%
-  dplyr::select(entrezId, pathway)
+  select(entrezId, pathway)
 
 n_distinct(reactome71_entrez$entrezId) # 10881
 n_distinct(reactome71_entrez$pathway) # 2309
@@ -123,7 +131,7 @@ if(!file.exists(file)){
 wp_gmt_3col <- read_table(file, col_names = F) %>% 
   separate(X1, into = c("X1", "url", "genes"), sep = "\t", extra = "merge") %>% 
   separate(X1, into = c("pathway_name", "db_version", "pathway_id", "species"), sep = "%") %>% 
-  dplyr::select(pathway_name, pathway_id, genes) %>% 
+  select(pathway_name, pathway_id, genes) %>% 
   mutate(genes = str_replace_all(genes, pattern = "\t", replacement = ","))
 
 n_distinct(wp_gmt_3col$pathway_id) # 565
@@ -147,4 +155,99 @@ wp_gmt %>% write_tsv(
   na = "",
   col_names = F
 )
+```
+
+## Prepare network with Entrez ids from PathwayCommons
+```{r}
+## Download PathwayCommons v12 SIF file
+url <- "https://www.pathwaycommons.org/archives/PC2/v12/PathwayCommons12.All.hgnc.sif.gz"
+file <- here("data", "PathwayCommons12.All.hgnc.sif.gz")
+
+if(!file.exists(file)){
+  download.file(url = url, destfile = file)
+}
+
+## Read and clean the SIF file
+pc12 <-
+  read_tsv(file = file,
+           col_names = c("geneA", "interaction_type", "geneB")) %>%
+  select(-interaction_type) %>% # get rid of the interaction type column
+  filter_all(all_vars(str_starts(., pattern = "CHEBI:", negate = T))) # get rid of CHEBI symbols
+
+nrow(pc12) # 1200159
+
+## Check if the gene symbols are approved HGNC symbols, if not, retrieve the approved ones
+approvedA <- pc12$geneA %>% 
+  HGNChelper::checkGeneSymbols() %>% 
+  splitstackshape::cSplit("Suggested.Symbol", sep = "///") %>% 
+  select("Suggested.Symbol_1")
+
+approvedB <- pc12$geneB %>% 
+  HGNChelper::checkGeneSymbols() %>% 
+  splitstackshape::cSplit("Suggested.Symbol", sep = "///") %>% 
+  select("Suggested.Symbol_1")
+
+pc12_approved_symbols <- bind_cols(approvedA, approvedB) %>% 
+  setNames(c("geneA", "geneB")) %>% 
+  drop_na() # CRIPAK and SPHAR are deprecated gene symbols; remove all of their interactions n=13
+    
+## Extract all uniqe gene symbols to be mapped to Entrez ids
+pc12_symbols <- list("a" = as.character(pc12_approved_symbols$geneA),
+                     "b" = as.character(pc12_approved_symbols$geneB)) %>% 
+  stack() %>%
+  distinct(values) # There are 19073 unique approved gene symbols in the WikiPathways SIF file
+
+## Map gene symbols using org.Hs.eg.db
+library("org.Hs.eg.db")
+mapping_orgHs <- pc12_symbols %>%
+  purrr::as_vector() %>% 
+  AnnotationDbi::mapIds(keytype = "SYMBOL",
+                        column = "ENTREZID",
+                        x = org.Hs.eg.db,
+                        multiVals = "first") %>% 
+  enframe("gene_symbol", "entrez_id")
+
+## Extract the approved gene symbols that did not map using org.Hs.eg.db and map them using biomaRt
+not_mapped <- mapping_orgHs %>% 
+  filter(is.na(entrez_id)) %>% # 28 gene symbols were not mapped by org.Hs.eg.db
+  select(gene_symbol) %>%
+  as_vector() %>%
+  as.character()
+
+ensembl_hs <- biomaRt::useMart(biomart = "ensembl", dataset = "hsapiens_gene_ensembl")
+additional_mapping <- not_mapped %>% 
+  biomaRt::getBM(
+    attributes = c("hgnc_symbol", "entrezgene_id"),
+    filters = "hgnc_symbol",
+    mart = ensembl_hs)
+
+## One gene did not map even though it can be found in NCBI. Substitute it manually.
+additional_mapping[additional_biomaRt$hgnc_symbol == "MT-RNR2", 2] <- "4550"
+
+## Combine all of the mapping data into one dataframe
+colnames(additional_mapping) <- colnames(mapping_orgHs)
+all_mapping <- bind_rows(mapping_orgHs, additional_mapping) %>% 
+  drop_na() # removed 28 rows (<1%), 19,059 rows remaining
+
+## BONUS: Extract gene symbols that were not mapped by neither method
+pc12_symbols %>% filter(!values %in% all_mapping$gene_symbol) # 14 gene symbols were not mapped
+
+## Substitute the gene symbols in the WikiPathways SIF dataframe to Entrez ids
+substituteA <- match(pc12_approved_symbols$geneA, all_mapping$gene_symbol) # match vector for geneA column
+substituteB <- match(pc12_approved_symbols$geneB, all_mapping$gene_symbol) # match vector for geneB column
+
+pc12A_entrez <- all_mapping$entrez_id[substituteA] %>% tibble::enframe() # map gene A
+pc12B_entrez <- all_mapping$entrez_id[substituteB] %>% tibble::enframe() # map gene B
+
+## Bind columns and filter out genes that were not mapped
+pc12_entrez <- bind_cols(pc12A_entrez, pc12B_entrez) %>%
+  select(value, value1) %>% 
+  filter_all(all_vars(!is.na(.)))
+    # removed 711 rows (<1%), 1,199,435 rows remaining (out of 1200159 original interactions in the SIF file)
+
+## construct the NET object
+net_pc12_entrez <- pc12_entrez %>% 
+  as.data.frame() %>%
+  NEArender::import.net(Lowercase = F)
+    # "Network of 985697 edges between 18840 nodes..."
 ```
