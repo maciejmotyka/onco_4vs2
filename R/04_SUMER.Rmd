@@ -14,7 +14,108 @@ editor_options:
 library(here)
 library(tidyverse)
 library(tidylog)
-library(org.Hs.eg.db)
 library(conflicted)
 conflict_prefer("select", "tidylog")
+conflict_prefer("mutate", "tidylog")
+```
+
+### Function definitions
+#### Def makeFilesForSumer
+```{r}
+makeFilesForSumer <- function(df_list, outdir) {
+  
+  for (name in names(df_list)) {
+    # create a gmt file
+    df_list[[name]] %>% 
+      select(pathway_name, pathway_id, "ags_genes" = starts_with("ags")) %>% 
+      splitstackshape::cSplit("ags_genes", sep = ",") %>% 
+      write_tsv(str_c(outdir, "/", name, ".gmt"), col_names = F, na = "")
+    
+    # create a score file
+    df_list[[name]] %>% 
+      select(pathway_name, fdr = starts_with("qval")) %>% 
+      mutate(fdr = -log10(fdr)) %>% 
+      # dplyr::mutate(fdr = round(fdr, digits = 3)) %>%
+      write_tsv(str_c(outdir, "/", name, "_score.txt"), col_names = F)
+  }
+}
+```
+
+#### Def makeConfig4 (4 cancers)
+```{r}
+makeConfig4 <- function(project_name,
+                        platform_type,
+                        max_num_pathways = 50,
+                        platform_abbr = "",
+                        input_file_path, config_output_path) {
+  
+  list("project" = project_name,
+       "top_num" = max_num_pathways,
+       "data" = list(
+         list(
+         "platform_name" = platform_type[1],
+         "platform_abbr" = platform_abbr[1],
+         "gmt_file" = str_c(input_file_path, "/", platform_type[1], "_", project_name, ".gmt"),
+         "score_file" = str_c(input_file_path, "/", platform_type[1], "_", project_name, "_score.txt")
+         ),
+         list(
+         "platform_name" = platform_type[2],
+         "platform_abbr" = platform_abbr[2],
+         "gmt_file" = str_c(input_file_path, "/", platform_type[2], "_", project_name, ".gmt"),
+         "score_file" = str_c(input_file_path, "/", platform_type[2], "_", project_name, "_score.txt")
+         ),
+         list(
+         "platform_name" = platform_type[3],
+         "platform_abbr" = platform_abbr[3],
+         "gmt_file" = str_c(input_file_path, "/", platform_type[3], "_", project_name, ".gmt"),
+         "score_file" = str_c(input_file_path, "/", platform_type[3], "_", project_name, "_score.txt")
+         ),
+         list(
+         "platform_name" = platform_type[4],
+         "platform_abbr" = platform_abbr[4],
+         "gmt_file" = str_c(input_file_path, "/", platform_type[4], "_", project_name, ".gmt"),
+         "score_file" = str_c(input_file_path, "/", platform_type[4], "_", project_name, "_score.txt")
+         )
+         )
+       ) %>%
+    jsonlite::toJSON(pretty = T, auto_unbox = T) %>%
+    writeLines(str_c(config_output_path, "/", project_name, "_config.json"))
+}
+```
+
+#### Def makeConfig3 (3 databases)
+```{r}
+makeConfig3 <- function(project_name,
+                        platform_type,
+                        max_num_pathways = 50,
+                        platform_abbr = "",
+                        input_file_path,
+                        config_output_path) {
+  
+  list("project" = project_name,
+       "top_num" = max_num_pathways,
+       "data" = list(
+         list(
+         "platform_name" = platform_type[1],
+         "platform_abbr" = platform_abbr[1],
+         "gmt_file" = str_c(input_file_path, "/",project_name, "_", platform_type[1], ".gmt"),
+         "score_file" = str_c(input_file_path, "/",project_name, "_", platform_type[1], "_score.txt")
+         ),
+         list(
+         "platform_name" = platform_type[2],
+         "platform_abbr" = platform_abbr[2],
+         "gmt_file" = str_c(input_file_path, "/",project_name, "_", platform_type[2], ".gmt"),
+         "score_file" = str_c(input_file_path, "/",project_name, "_", platform_type[2], "_score.txt")
+         ),
+         list(
+         "platform_name" = platform_type[3],
+         "platform_abbr" = platform_abbr[3],
+         "gmt_file" = str_c(input_file_path, "/",project_name, "_", platform_type[3], ".gmt"),
+         "score_file" = str_c(input_file_path, "/",project_name, "_", platform_type[3], "_score.txt")
+         )
+         )
+       ) %>%
+    jsonlite::toJSON(pretty = T, auto_unbox = T) %>%
+    writeLines(str_c(config_output_path, "/", project_name, "_config.json"))
+}
 ```
