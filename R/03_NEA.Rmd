@@ -26,6 +26,7 @@ conflict_prefer("distinct", "tidylog")
 conflict_prefer("filter_at", "tidylog")
 conflict_prefer("group_by", "tidylog")
 conflict_prefer("rename_at", "tidylog")
+conflict_prefer("count", "tidylog")
 ```
 
 ## Prepare AGS with Entrez ids
@@ -345,10 +346,10 @@ significantPerCancer <- function(nea_results ,cancer, threshold) {
 #### WikiPathways
 ```{r}
 res_nea_wp <- nea_wp %>% extractNeaResults()
-brca_wp <- res_nea_wp %>% significantPerCancer("brca", 0.01) # 130; 0
-luad_wp <- res_nea_wp %>% significantPerCancer("luad", 0.01) # 218; 1
-prad_wp <- res_nea_wp %>% significantPerCancer("prad", 0.01) # 243; 1
-coadread_wp <- res_nea_wp %>% significantPerCancer("coadread", 0.01) # 110; 1
+brca_wp <- res_nea_wp %>% significantPerCancer("brca", 0.01) # 130; 215
+luad_wp <- res_nea_wp %>% significantPerCancer("luad", 0.01) # 218; 156
+prad_wp <- res_nea_wp %>% significantPerCancer("prad", 0.01) # 243; 194
+coadread_wp <- res_nea_wp %>% significantPerCancer("coadread", 0.01) # 110; 200
 ```
 
 #### KEGG
@@ -369,7 +370,7 @@ prad_react <- res_nea_react %>% significantPerCancer("prad", 0.01) # 395; 364
 coadread_react <- res_nea_react %>% significantPerCancer("coadread", 0.01) # 242; 322
 ```
 
-## Explore the results
+## Create Venn diagrams of enriched pathways for each database and extract pathways common to all 4 cancers
 ### KEGG
 ```{r}
 venn_kegg <- gplots::venn(
@@ -380,9 +381,10 @@ venn_kegg <- gplots::venn(
     "PRAD" = prad_kegg$pathway_name
   )
 )
-attr(venn_kegg, "intersections")
-
-bind_rows(brca_kegg, coadread_kegg, prad_kegg, luad_kegg) %>% distinct(pathway_name) %>% count() # 220
+common_kegg <- attr(venn_kegg, "intersections")$`BRCA:COADREAD:LUAD:PRAD`
+  # 84 pathways are common to all 4 cancers
+bind_rows(brca_kegg, coadread_kegg, prad_kegg, luad_kegg) %>% distinct(pathway_name) %>% count()
+  # 220; There are 252 unique enriched KEGG pathways 
 ```
 
 ### WikiPathways
@@ -395,9 +397,10 @@ venn_wp <- gplots::venn(
     "PRAD" = prad_wp$pathway_name
   )
 )
-attr(venn_wp, "intersections")
-
-bind_rows(brca_wp, coadread_wp, prad_wp, luad_wp) %>% distinct(pathway_name) %>% count() # 294
+common_wp <- attr(venn_wp, "intersections")$`BRCA:COADREAD:LUAD:PRAD`
+  # 106 pathways are common to all 4 cancers
+bind_rows(brca_wp, coadread_wp, prad_wp, luad_wp) %>% distinct(pathway_name) %>% count()
+  # 294; There are 294 unique enriched WikiPathways pathways
 ```
 
 ### Reactome
@@ -410,14 +413,32 @@ venn_react <- gplots::venn(
     "PRAD" = prad_react$pathway_name
   )
 )
-attr(venn_react, "intersections")
-
+common_react <- attr(venn_react, "intersections")$`BRCA:COADREAD:LUAD:PRAD`
+  # 119 pathways are common to all 4 cancers
 bind_rows(brca_react, coadread_react, prad_react, luad_react) %>% distinct(pathway_name) %>% count()
+  # There are 695 unique enriched Reactome pathways
+```
+
+## Place the 3 Venn diagrams on one figure
+```{r}
+grDevices::pdf(file = here("output", "pathways_NEArender_venn.pdf"))
+graphics::par(mfrow = c(2,2), cex = 0.7, oma = c(0, 0, 4, 0))
+graphics::par(mar = c(0,0,2,0))
+graphics::plot(venn_kegg, small = 1)
+graphics::title(main = "KEGG")
+graphics::par(mar = c(0,0,2,0))
+graphics::plot(venn_react, small = 1)
+graphics::title(main = "Reactome")
+graphics::par(mar = c(0,0,1,0), fig = c(0.25,0.75,0,0.5), new = T)
+graphics::plot(venn_wp, small = 1)
+graphics::title(main = "WikiPathways")
+graphics::mtext("Overlap between enriched pathways", outer = T, cex = 1, padj = -2)
+grDevices::dev.off()
 ```
 
 ## Export results
 ### remove unnecessary variables and save the rest
 ```{r}
-varhandle::rm.all.but(keep = c("brca*", "prad*", "luad*", "coadread*", "*gmt_3col"), keep_functions = F)
-varhandle::save.var(path = here("output_data"), newdirtag = "from_NEArender")
+varhandle::rm.all.but(keep = c("brca*", "prad*", "luad*", "coadread*", "common*"), keep_functions = F)
+varhandle::save.var(path = here("analysis"), newdirtag = "NEArender_results")
 ```
