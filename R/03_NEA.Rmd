@@ -436,9 +436,21 @@ graphics::mtext("Overlap between enriched pathways", outer = T, cex = 1, padj = 
 grDevices::dev.off()
 ```
 
-## Export results
-### remove unnecessary variables and save the rest
+## Save results to .xlsx file and clean up
 ```{r}
-varhandle::rm.all.but(keep = c("brca*", "prad*", "luad*", "coadread*", "common*"), keep_functions = F)
+## Create dataframe with common pathways for each database
+common_all <- rowr::cbind.fill(common_kegg, common_react, common_wp, fill = "") %>%
+  setNames(c("KEGG", "Reactome", "WikiPathways"))
+
+## Write results to a multi-sheet .xlsx file
+excel_sheets <- Hmisc::llist(common_all,
+                             brca_kegg, coadread_kegg, luad_kegg, prad_kegg,
+                             brca_react, coadread_react, luad_react, prad_react,
+                             brca_wp, coadread_wp, luad_wp, prad_wp)
+
+writexl::write_xlsx(excel_sheets, path = here("output", "NEArender_results.xlsx"))
+
+### remove unnecessary variables and save the rest
+varhandle::rm.all.but(keep = c("brca*", "prad*", "luad*", "coadread*", "common_all"), keep_functions = F)
 varhandle::save.var(path = here("analysis"), newdirtag = "NEArender_results")
 ```
