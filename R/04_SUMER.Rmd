@@ -1,0 +1,20 @@
+---
+title: "Summarize enrichment results with SUMER"
+output:
+  html_notebook:
+    code_folding: show
+editor_options:
+  chunk_output_type: console
+---
+# {.tabset .tabset-fade .tabset-pills}
+
+## Setup
+### Load libraries and resolve conflicts
+```{r}
+library(here)
+library(tidyverse)
+library(tidylog)
+library(org.Hs.eg.db)
+library(conflicted)
+conflict_prefer("select", "tidylog")
+```
