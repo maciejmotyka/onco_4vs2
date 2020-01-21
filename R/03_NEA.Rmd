@@ -14,18 +14,23 @@ editor_options:
 library(here)
 library(tidyverse)
 library(tidylog)
-conflicted::conflict_prefer("filter", "tidylog")
-conflicted::conflict_prefer("select", "tidylog")
-conflicted::conflict_prefer("drop_na", "tidylog")
-conflicted::conflict_prefer("filter_all", "tidylog")
-conflicted::conflict_prefer("full_join", "tidylog")
+library(org.Hs.eg.db)
+library(conflicted)
+conflict_prefer("filter", "tidylog")
+conflict_prefer("select", "tidylog")
+conflict_prefer("drop_na", "tidylog")
+conflict_prefer("filter_all", "tidylog")
+conflict_prefer("full_join", "tidylog")
 conflict_prefer("mutate", "tidylog")
 conflict_prefer("distinct", "tidylog")
 conflict_prefer("filter_at", "tidylog")
+conflict_prefer("group_by", "tidylog")
 ```
 
 ## Prepare AGS with Entrez ids
 ```{r}
+load(here("analysis", "20200120-205728" ,"all_degs_HPA.RData"))
+
 ## retrieve mapping
 ags_ensg2entrez <- 
   all_degs_HPA$gene %>%
@@ -39,7 +44,7 @@ ags_ensg2entrez <-
 n_distinct(all_degs_HPA$gene) # 730
 
 ## map the ids and construct the AGS object
-ags_4vs2 <- all_degs_HPA %>%
+ags_4vs2_entrez <- all_degs_HPA %>%
   full_join(ags_ensg2entrez, by = c("gene" = "ensg")) %>%
   as.data.frame() %>%
   NEArender::import.gs(gs.type = "a", col.gene = 5, col.set = 1, Lowercase = F)
@@ -222,10 +227,11 @@ additional_mapping <- not_mapped %>%
     mart = ensembl_hs)
 
 ## One gene did not map even though it can be found in NCBI. Substitute it manually.
-additional_mapping[additional_biomaRt$hgnc_symbol == "MT-RNR2", 2] <- "4550"
+additional_mapping[additional_mapping$hgnc_symbol == "MT-RNR2", 2] <- "4550"
 
 ## Combine all of the mapping data into one dataframe
 colnames(additional_mapping) <- colnames(mapping_orgHs)
+
 all_mapping <- bind_rows(mapping_orgHs, additional_mapping) %>% 
   drop_na() # removed 28 rows (<1%), 19,059 rows remaining
 
@@ -249,5 +255,45 @@ pc12_entrez <- bind_cols(pc12A_entrez, pc12B_entrez) %>%
 net_pc12_entrez <- pc12_entrez %>% 
   as.data.frame() %>%
   NEArender::import.net(Lowercase = F)
-    # "Network of 985697 edges between 18840 nodes..."
+    # "Network of 1038803 edges between 19059 nodes..."
+```
+
+## Save the AGS, NET, and 3 FGS objects
+```{r}
+variables_to_save <- c("ags_4vs2_entrez",
+                       "net_pc12_entrez",
+                       "fgs_kegg_entrez",
+                       "fgs_react71_entrez",
+                       "fgs_wp_entrez")
+
+varhandle::save.var(path = here("analysis"), varlist = variables_to_save, newdirtag = "NEArender_input")
+varhandle::rm.all.but(keep = variables_to_save)
+```
+
+## Perfom NEA
+```{r}
+nea_react <- NEArender::nea.render(AGS = ags_4vs2_entrez,
+                                   FGS = fgs_react71_entrez,
+                                   NET = net_pc12_entrez,
+                                   Parallelize = 8,
+                                   members = T,
+                                   graph = T)
+
+nea_kegg <- NEArender::nea.render(AGS = ags_4vs2_entrez,
+                                  FGS = fgs_kegg_entrez,
+                                  NET = net_pc12_entrez,
+                                  Parallelize = 8,
+                                  members = T,
+                                  graph = T)
+
+nea_wp <- NEArender::nea.render(AGS = ags_4vs2_entrez,
+                                FGS = fgs_wp_entrez,
+                                NET = net_pc12_entrez,
+                                Parallelize = 8,
+                                members = T,
+                                graph = T)
+
+varhandle::save.var(newdirtag = "NEArender_raw_results",
+                    path = here("analysis"),
+                    varlist = c("nea_kegg", "nea_react", "nea_wp"))
 ```
