@@ -87,12 +87,12 @@ react_gmt_3col <- reactome71_entrez %>%
   separate(pathway, into = c("pathway_id", "pathway_name"), sep = "_", extra = "merge")
   
 ## Save the gmt file
-react_gmt_3col %>%
-  write_tsv(
-    here("analysis", "full_gmts_entrez", "react_entrez_full.gmt"),
-    na = "",
-    col_names = F
-)
+# react_gmt_3col %>%
+#   write_tsv(
+#     here("analysis", "full_gmts_entrez", "react_entrez_full.gmt"),
+#     na = "",
+#     col_names = F
+# )
 ```
 
 ### KEGG
@@ -118,11 +118,11 @@ fgs_kegg_entrez <- kegg_long %>%
   NEArender::import.gs(gs.type = "f", col.gene = 2, col.set = 1, Lowercase = F)
 
 ## Save the gmt file
-kegg_gmt_3col %>% write_tsv(
-  here("analysis", "full_gmts_entrez", "kegg_entrez_full.gmt"),
-  na = "",
-  col_names = F
-)
+# kegg_gmt_3col %>% write_tsv(
+#   here("analysis", "full_gmts_entrez", "kegg_entrez_full.gmt"),
+#   na = "",
+#   col_names = F
+# )
 ```
 
 ### WikiPathways
@@ -157,11 +157,11 @@ wp_gmt <- wp_gmt_3col %>%
   splitstackshape::cSplit("genes", sep = ",", direction = "wide", type.convert = F)
 
 ## Save the gmt file
-wp_gmt %>% write_tsv(
-  here("analysis", "full_gmts_entrez", "wp_entrez_full.gmt"),
-  na = "",
-  col_names = F
-)
+# wp_gmt %>% write_tsv(
+#   here("analysis", "full_gmts_entrez", "wp_entrez_full.gmt"),
+#   na = "",
+#   col_names = F
+# )
 ```
 
 ## Prepare network with Entrez ids from PathwayCommons
@@ -269,7 +269,7 @@ variables_to_save <- c("ags_4vs2_entrez",
                        "fgs_wp_entrez")
 
 varhandle::save.var(path = here("analysis"), varlist = variables_to_save, newdirtag = "NEArender_input")
-varhandle::rm.all.but(keep = variables_to_save)
+# varhandle::rm.all.but(keep = variables_to_save)
 ```
 
 ## Perfom NEA
@@ -451,6 +451,7 @@ excel_sheets <- Hmisc::llist(common_all,
 writexl::write_xlsx(excel_sheets, path = here("output", "NEArender_results.xlsx"))
 
 ### remove unnecessary variables and save the rest
-varhandle::rm.all.but(keep = c("brca*", "prad*", "luad*", "coadread*", "common_all"), keep_functions = F)
-varhandle::save.var(path = here("analysis"), newdirtag = "NEArender_results")
+variables_to_save <- c("brca*", "prad*", "luad*", "coadread*", "common_all", "*_gmt_3col")
+varhandle::rm.all.but(keep = variables_to_save, keep_functions = F)
+varhandle::save.var(varlist = variables_to_save, path = here("analysis"), newdirtag = "NEArender_results")
 ```
