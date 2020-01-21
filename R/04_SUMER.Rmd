@@ -18,6 +18,7 @@ library(tidylog)
 library(conflicted)
 conflict_prefer("select", "tidylog")
 conflict_prefer("mutate", "tidylog")
+conflict_prefer("left_join", "tidylog")
 ```
 
 ### Function definitions
