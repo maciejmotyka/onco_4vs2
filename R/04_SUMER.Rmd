@@ -8,6 +8,7 @@ editor_options:
 ---
 # {.tabset .tabset-fade .tabset-pills}
 
+# SUMER step 0 - prepare input files and configs
 ## Setup
 ### Load libraries and resolve conflicts
 ```{r}
@@ -119,3 +120,118 @@ makeConfig3 <- function(project_name,
     writeLines(str_c(config_output_path, "/", project_name, "_config.json"))
 }
 ```
+
+## Analysis
+### Load NEArender results
+```{r}
+dir(here("analysis", "20200121-231554-NEArender_results"), full.names = T) %>% 
+  map(load, .GlobalEnv)
+```
+
+### Prepare input files to Sumer
+#### Create gmt and score files for Sumer
+```{r} 
+df_list <- Hmisc::llist(
+  brca_kegg,
+  brca_react,
+  brca_wp,
+  prad_kegg,
+  prad_react,
+  prad_wp,
+  luad_kegg,
+  luad_react,
+  luad_wp,
+  coadread_kegg,
+  coadread_react,
+  coadread_wp
+)
+
+makeFilesForSumer(df_list = df_list, outdir = here("analysis","SUMER"))
+```
+
+#### Create config files for Sumer
+##### Per database
+```{r}
+makeConfig4(project_name = "kegg",
+                   platform_type = c("brca", "prad", "luad", "coadread"),
+                   max_num_pathways = ,
+                   platform_abbr = c("b", "p", "l", "cr"),
+                   input_file_path = here("analysis", "SUMER"), # looks for brca.gmt, brca_score.txt, prad.gmt, prad_score.txt, etc.
+                   config_output_path = here("analysis", "SUMER", "configs"))
+
+makeConfig4(project_name = "wp",
+                   platform_type = c("brca", "prad", "luad", "coadread"),
+                   max_num_pathways = ,
+                   platform_abbr = c("b", "p", "l", "cr"),
+                   input_file_path = here("analysis", "SUMER"),
+                   config_output_path = here("analysis", "SUMER", "configs"))
+
+makeConfig4(project_name = "react",
+                   platform_type = c("brca", "prad", "luad", "coadread"),
+                   max_num_pathways = ,
+                   platform_abbr = c("b", "p", "l", "cr"),
+                   input_file_path = here("analysis", "SUMER"),
+                   config_output_path = here("analysis", "SUMER", "configs"))
+```
+
+##### Per cancer
+```{r}
+makeConfig3(project_name = "brca",
+                   platform_type = c("kegg", "wp", "react"),
+                   max_num_pathways = ,
+                   platform_abbr = c("kg", "wp", "rct"),
+                   input_file_path = here("analysis", "SUMER"),
+                   config_output_path = here("analysis", "SUMER", "configs"))
+
+makeConfig3(project_name = "prad",
+                   platform_type = c("kegg", "wp", "react"),
+                   max_num_pathways = ,
+                   platform_abbr = c("kg", "wp", "rct"),
+                   input_file_path = here("analysis", "SUMER"),
+                   config_output_path = here("analysis", "SUMER", "configs"))
+
+makeConfig3(project_name = "luad",
+                   platform_type = c("kegg", "wp", "react"),
+                   max_num_pathways = ,
+                   platform_abbr = c("kg", "wp", "rct"),
+                   input_file_path = here("analysis", "SUMER"),
+                   config_output_path = here("analysis", "SUMER", "configs"))
+
+makeConfig3(project_name = "coadread",
+                   platform_type = c("kegg", "wp", "react"),
+                   max_num_pathways = ,
+                   platform_abbr = c("kg", "wp", "rct"),
+                   input_file_path = here("analysis", "SUMER"),
+                   config_output_path = here("analysis", "SUMER", "configs"))
+```
+
+### Make gmt files for 2 step of Sumer
+#### Define function for making gmt files
+```{r}
+makeFullGmt <- function(ags, gmt, outfile){
+  left_join(ags, gmt, by = c("pathway_id", "pathway_name")) %>%
+  select(pathway_name, pathway_id, genes) %>%
+  # splitstackshape::cSplit("genes") %>%
+  write_tsv(here("analysis", "full_gmts", outfile), na = "", col_names = F)
+}
+```
+
+#### Make gmt files
+```{r}
+makeFullGmt(prad_kegg, kegg_gmt_3col, outfile = "prad-kegg.gmt")
+makeFullGmt(prad_react, react_gmt_3col, "prad-react.gmt")
+makeFullGmt(prad_wp, wp_gmt_3col, "prad-wp.gmt")
+
+makeFullGmt(luad_kegg, kegg_gmt_3col, outfile = "luad-kegg.gmt")
+makeFullGmt(luad_react, react_gmt_3col, "luad-react.gmt")
+makeFullGmt(luad_wp, wp_gmt_3col, "luad-wp.gmt")
+
+makeFullGmt(brca_kegg, kegg_gmt_3col, outfile = "brca-kegg.gmt")
+makeFullGmt(brca_react, react_gmt_3col, "brca-react.gmt")
+makeFullGmt(brca_wp, wp_gmt_3col, "brca-wp.gmt")
+
+makeFullGmt(coadread_kegg, kegg_gmt_3col, outfile = "coadread-kegg.gmt")
+makeFullGmt(coadread_react, react_gmt_3col, "coadread-react.gmt")
+makeFullGmt(coadread_wp, wp_gmt_3col, "coadread-wp.gmt")
+```
+
