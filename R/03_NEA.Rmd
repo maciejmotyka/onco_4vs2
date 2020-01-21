@@ -25,6 +25,7 @@ conflict_prefer("mutate", "tidylog")
 conflict_prefer("distinct", "tidylog")
 conflict_prefer("filter_at", "tidylog")
 conflict_prefer("group_by", "tidylog")
+conflict_prefer("rename_at", "tidylog")
 ```
 
 ## Prepare AGS with Entrez ids
@@ -144,7 +145,7 @@ n_distinct(wp_gmt_3col$pathway_id) # 565
 ## Merge pathway ids with pathway names and cast the dataframe into a long format
 wp_long <- wp_gmt_3col %>% 
   unite("pathway", pathway_id, pathway_name, sep = "_") %>% 
-  splitstackshape::cSplit("genes", sep = "\t", direction = "long", type.convert = F)
+  splitstackshape::cSplit("genes", sep = ",", direction = "long", type.convert = F)
 
 ## Create an FGS object
 fgs_wp_entrez <- wp_long %>%
@@ -152,7 +153,7 @@ fgs_wp_entrez <- wp_long %>%
 
 ## Create gmt file to use with Sumer
 wp_gmt <- wp_gmt_3col %>% 
-  splitstackshape::cSplit("genes", sep = "\t", direction = "wide", type.convert = F)
+  splitstackshape::cSplit("genes", sep = ",", direction = "wide", type.convert = F)
 
 ## Save the gmt file
 wp_gmt %>% write_tsv(
@@ -296,4 +297,127 @@ nea_wp <- NEArender::nea.render(AGS = ags_4vs2_entrez,
 varhandle::save.var(newdirtag = "NEArender_raw_results",
                     path = here("analysis"),
                     varlist = c("nea_kegg", "nea_react", "nea_wp"))
+```
+
+## Extract results
+### Define functions
+#### extractNeaResult()
+```{r}
+extractNeaResults <- function(nea_results) {
+  members_ags <- nea_results$members.ags %>%
+    t.default() %>%
+    as.data.frame.matrix() %>%
+    rownames_to_column("pathway") %>%
+    rename_at(.vars = vars(-pathway), .funs = ~paste0("ags_", .))
+  
+  members_fgs <- nea_results$members.fgs %>%
+    as.data.frame.matrix() %>%
+    rownames_to_column("pathway") %>%
+    rename_at(vars(-pathway), ~paste0("fgs_", .))
+
+  q_values <- nea_results$q %>%
+    as.data.frame.matrix() %>%
+    rownames_to_column("pathway") %>%
+    rename_at(vars(-pathway), ~paste0("qval_", .))
+  
+  n_missing_qvals <- is.na(q_values) %>% sum()
+  print(paste("Number of missing q values: ", n_missing_qvals))
+  
+  nea_results_clean <- q_values %>%
+    full_join(members_ags, by = "pathway") %>%
+    full_join(members_fgs, by = "pathway") %>%
+    separate(pathway, into = c("pathway_id", "pathway_name"), sep = "_", extra = "merge")
+
+  nea_results_clean
+}
+```
+
+#### significantPerCancer()
+```{r}
+significantPerCancer <- function(nea_results ,cancer, threshold) {
+  nea_results %>%
+    select(starts_with("pathway"), contains(cancer)) %>%
+    filter_at(vars(contains("qval")), any_vars(. < threshold))
+}
+```
+
+### Clean the results and extract significant pathways
+#### WikiPathways
+```{r}
+res_nea_wp <- nea_wp %>% extractNeaResults()
+brca_wp <- res_nea_wp %>% significantPerCancer("brca", 0.01) # 130; 0
+luad_wp <- res_nea_wp %>% significantPerCancer("luad", 0.01) # 218; 1
+prad_wp <- res_nea_wp %>% significantPerCancer("prad", 0.01) # 243; 1
+coadread_wp <- res_nea_wp %>% significantPerCancer("coadread", 0.01) # 110; 1
+```
+
+#### KEGG
+```{r}
+res_nea_kegg <- nea_kegg %>% extractNeaResults()
+brca_kegg <- res_nea_kegg %>% significantPerCancer("brca", 0.01) # 133; 193
+luad_kegg <- res_nea_kegg %>% significantPerCancer("luad", 0.01) # 134; 132
+prad_kegg <- res_nea_kegg %>% significantPerCancer("prad", 0.01) # 182; 184
+coadread_kegg <- res_nea_kegg %>% significantPerCancer("coadread", 0.01) # 100; 187
+```
+
+#### Reactome
+```{r}
+res_nea_react <- nea_react %>% extractNeaResults()
+brca_react <- res_nea_react %>% significantPerCancer("brca", 0.01) # 281; 486
+luad_react <- res_nea_react %>% significantPerCancer("luad", 0.01) # 516; 253
+prad_react <- res_nea_react %>% significantPerCancer("prad", 0.01) # 395; 364
+coadread_react <- res_nea_react %>% significantPerCancer("coadread", 0.01) # 242; 322
+```
+
+## Explore the results
+### KEGG
+```{r}
+venn_kegg <- gplots::venn(
+  list(
+    "BRCA" = brca_kegg$pathway_name,
+    "COADREAD" = coadread_kegg$pathway_name,
+    "LUAD" = luad_kegg$pathway_name,
+    "PRAD" = prad_kegg$pathway_name
+  )
+)
+attr(venn_kegg, "intersections")
+
+bind_rows(brca_kegg, coadread_kegg, prad_kegg, luad_kegg) %>% distinct(pathway_name) %>% count() # 220
+```
+
+### WikiPathways
+```{r}
+venn_wp <- gplots::venn(
+  list(
+    "BRCA" = brca_wp$pathway_name,
+    "COADREAD" = coadread_wp$pathway_name,
+    "LUAD" = luad_wp$pathway_name,
+    "PRAD" = prad_wp$pathway_name
+  )
+)
+attr(venn_wp, "intersections")
+
+bind_rows(brca_wp, coadread_wp, prad_wp, luad_wp) %>% distinct(pathway_name) %>% count() # 294
+```
+
+### Reactome
+```{r}
+venn_react <- gplots::venn(
+  list(
+    "BRCA" = brca_react$pathway_name,
+    "COADREAD" = coadread_react$pathway_name,
+    "LUAD" = luad_react$pathway_name,
+    "PRAD" = prad_react$pathway_name
+  )
+)
+attr(venn_react, "intersections")
+
+bind_rows(brca_react, coadread_react, prad_react, luad_react) %>% distinct(pathway_name) %>% count()
+```
+
+## Export results
+### remove unnecessary variables and save the rest
+```{r}
+varhandle::rm.all.but(keep = c("brca*", "prad*", "luad*", "coadread*", "*gmt_3col"), keep_functions = F)
+varhandle::save.var(path = here("output_data"), newdirtag = "from_NEArender")
 ```
