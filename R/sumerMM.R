@@ -1,4 +1,12 @@
-sumerWeightedSetCover <- function(config_file, output_dir, n_threads = 4) {
+require("jsonlite")
+require("proxy")
+require("apcluster")
+require("uuid")
+require("dplyr")
+
+sumerWeightedSetCover <- function(config_file, full_gmts_dir, output_dir, n_threads = 4, project) {
+
+  ## Check if config file makes sense
   full_config <- check_config(config_file)
 
   ## Make sure that the output directory exists and is empty
@@ -14,9 +22,11 @@ sumerWeightedSetCover <- function(config_file, output_dir, n_threads = 4) {
     dir.create(output_dir)
     }
 
+  # Retrieve some config data
   config <- full_config$data
   n_platform <- nrow(config)
 
+  # Create empty variables
   all_platform_abbr <- c()
   all_data <- data.frame(platfrom=character(), name=character(), size=integer(), score=numeric())
   work_dirs <- list()
@@ -55,47 +65,61 @@ sumerWeightedSetCover <- function(config_file, output_dir, n_threads = 4) {
     set_score <- unname(sapply(geneset_info, "as.double")) # !! need to repair this; should be equal to the number of genes in a set, but now every list holding the genes contains also empty elements, which makes them appear equal length; is created by gmt2list function
     all_data <- rbind(all_data, data.frame(platform=set_platfrom, name=set_name, size=set_size, score=set_score, stringsAsFactors=FALSE))
   }
-}
 
-check_config <- function(config_file) {
-  # maximum of number of platforms we can support
-  MAX_N_PLATFORM <- 7
-  old_config <- jsonlite::fromJSON(config_file)
-  if (! "project" %in% names(old_config)) {
-    stop("please provide project description")
-  }
-  if (! "data" %in% names(old_config)) {
-    stop("please provide project data information")
-  }
-  if (! "top_num" %in% names(old_config)) {
-    old_config$top_num <- 50
-  }
-  config <- old_config$data
-  n_platform <- nrow(config)
-  if (n_platform > MAX_N_PLATFORM) {
-    stop(paste0("currently supports up to ", MAX_N_PLATFORM, " platforms"))
-  } else if (n_platform < 1) {
-    stop("must provide at least data from 1 platform")
-  }
-  # check if data file valid
-  for (i in seq_len(n_platform)) {
-    cur_platform <- config[i, "platform"]
-    if(!file.exists(config[i, "gmt_file"])) {
-      stop(paste0("gmt_file does not exist for platform ", cur_platform))
-    } else if (!file.exists(config[i, "score_file"])){
-      stop(paste0("score_file does not exist for platform ", cur_platform))
+  ### ----Affinity Propagation----
+  ## 1. Create input data for Affinity Propagation
+
+  ap_data <- list()
+  ap_data$output.dir <- output_dir # output_dir is an argument of the sumer function
+  ap_data$md5val <- "sumer" # used when naming some of the output files
+
+  # Iterate over platforms, read the results from Weighted Set Cover, substitute AGS genes with genes from the full GMT files
+  genesetIds <- list()
+  genesetInfo <- list()
+  for(i in seq_len(n_platform)){ # iterates over platforms
+    cur_config <- config[i,]
+    cur_platform <- cur_config[["platform_name"]]
+    cur_platform_abbr <- cur_config[["platform_abbr"]]
+    cur_sc_output_dir <- work_dirs[[cur_platform]] # reads which folder belongs to which platform
+
+    # reads the sctopsets.txt (pathway:score:genes) file from a platform specific folder into a dataframe
+    sc_gs <- read.table(file.path(output_dir, cur_sc_output_dir, "sctopsets.txt"),
+                        sep="\t", stringsAsFactors=FALSE, header=TRUE)
+
+    # Determine which full GMT file to use
+    if(file.exists(file.path(full_gmts_dir, paste0(cur_platform, "-", project, ".gmt")))){
+      full_gmt_file <- file.path(full_gmts_dir, paste0(cur_platform, "-", project, ".gmt"))
+    } else {
+      full_gmt_file <- file.path(full_gmts_dir, paste0(project, "-", cur_platform, ".gmt"))
+    }
+
+    # Parse GMT file with all of the genes that belong te each pathway
+    full_gmt <- read.table(full_gmt_file, sep = "\t", stringsAsFactors = F,
+                           col.names = c("pathway_name", "pathway_id", "all_genes"), quote = "")
+
+    # Substitute AGS genes interacting with a pathway with all of the genes belonging to that pathway
+    sc_gs2 <- dplyr::left_join(sc_gs, full_gmt, by = c("geneset" = "pathway_name")) %>%
+      dplyr::select(geneset, score, all_genes)
+
+    # Populate genesetIds and genesetInfo with relevant pathway data from sc_gs2
+    for (row in 1:nrow(sc_gs2)) {
+      tmpname <- paste(cur_platform_abbr, sc_gs2[row, "geneset"], sep="_")
+      genesetIds[[tmpname]] <- unlist(strsplit(sc_gs2[row, "all_genes"], ","))
+      genesetInfo[[tmpname]] <- list()
+      genesetInfo[[tmpname]][["signP"]] <- sc_gs2[row, "score" ] # store  score as signP
+      genesetInfo[[tmpname]][["leNum"]] <- length(genesetIds[[tmpname]])
+      # not used
+      genesetInfo[[tmpname]][["PValue"]] <-  NULL
+      genesetInfo[[tmpname]][["NES"]] <-  sc_gs2[row, "score" ] # store score as NES
+      # not used
+      genesetInfo[[tmpname]][["FDR"]] <- NULL
+      genesetInfo[[tmpname]][["platform"]] <- cur_platform
     }
   }
-  # TODO: check platform abbr is unique
-  return(old_config)
-}
 
-gmt2list <- function(gmt_file){
-  if (!file.exists(gmt_file)) {
-    stop("There is no such gmt file.")
-  }
-  x <- scan(gmt_file, what="character", sep="\n", quiet=TRUE, strip.white = T) # added strip.white=T to remove the trailing tabs in my gmt files
-  y <- strsplit(x, "\t")
-  names(y) <- sapply(y, `[[`, 1)
-  gmt_list <- lapply(y, `[`, c(-1,-2))
+  ap_data$genesetIds <- genesetIds # add genesetIds to ap_data
+  ap_data$genesetInfo <- genesetInfo # add genesetInfo to ap_data
+
+  ## 2. Perform the Affinity Propagation
+  ap_results <- affinityPropagation(ap_data) # performs the AP
 }

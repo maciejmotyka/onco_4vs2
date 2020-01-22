@@ -153,7 +153,7 @@ jaccardSim <- function(genesetInfo, genesetIds){
   all.genes <- sort(unique(unlist(genesetIds)))
   overlap.mat <- sapply(genesetIds, function(x) {as.integer(all.genes %in% x)})
   # proxy::simil
-  sim.mat <- as.matrix(proxy::simil(overlap.mat, by_rows=FALSE, method="Jaccard"))
+  sim.mat <- proxy::as.matrix(proxy::simil(overlap.mat, by_rows=FALSE, method="Jaccard"))
   sim.mat[is.na(sim.mat)] <- 1
   # if there is no overlap, set the similarity to -Inf
   sim.mat[sim.mat == 0] <- -Inf
