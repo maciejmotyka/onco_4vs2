@@ -244,18 +244,23 @@ source(here("R/sumerWeightedSetCover.R"))
 source(here("R/topGeneSets.R"))# defines: uuid.gen and topGeneSets
 source(here("R/weightedSetCover.R")) # defines: topSCGeneSets
 
-## Create list of config file paths and output directories
+## Create the output directory
+if(!dir.exists(here("output", "SUMER"))){
+  dir.create(here("output", "SUMER"))
+}
+
+## Run Weighted Set Cover one project at a time
 projects <- c("kegg", "wp", "react", "brca", "coadread", "luad", "prad")
-configs <- list()
 for (project in projects) {
-  configs[project] <- here("analysis", "SUMER", "configs", paste0(project, "_config.json"))
-}
-output_dirs <- list()
-for (project in projects) {
-  output_dirs[project] <- here("output", "SUMER", project)
+  print(paste("Now processing:", project))
+  sumerWeightedSetCover(config_file = here("analysis", "SUMER", "configs", paste0(project, "_config.json")),
+                        output_dir = here("output", "SUMER", project),
+                        n_threads = 8)
 }
 
-
-sumerWeightedSetCover(configs["kegg"], output_dirs["kegg"], n_threads)
+  ## If you get the following error when executing Weighted Set Cover, make more RAM available and/or decrease n_threads 
+    # In addition: Warning message:
+    # In parallel::mclapply(seq(nrow(candidates)), function(row, candidates,  :
+    #   all scheduled cores encountered errors in user code
 ```
 
