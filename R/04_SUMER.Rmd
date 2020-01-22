@@ -236,3 +236,26 @@ makeFullGmt(coadread_react, react_gmt_3col, "coadread-react.gmt")
 makeFullGmt(coadread_wp, wp_gmt_3col, "coadread-wp.gmt")
 ```
 
+# SUMER step 1 - Weighted Set Cover
+```{r}
+# source scripts needed by sumer step 1
+source(here("R/sumerWeightedSetCover.R"))
+  # my own version; defines: sumerWeightedSetCover, check_config and gmt2list
+source(here("R/topGeneSets.R"))# defines: uuid.gen and topGeneSets
+source(here("R/weightedSetCover.R")) # defines: topSCGeneSets
+
+
+projects <- c("kegg", "wp", "react", "brca", "coadread", "luad", "prad")
+configs <- list()
+for (project in projects) {
+  configs[project] <- here("analysis", "SUMER", "configs", paste0(project, "_config.json"))
+}
+
+output_dirs <- list()
+for (project in projects) {
+  output_dirs[project] <- here("output", "SUMER", project)
+}
+
+
+```
+
