@@ -110,7 +110,7 @@ marginalBenefit <- function(cur.set.name, cur.res, geneset_ids){
     not.covered.genes <- cur.genes
   } else{
     covered.genes <- unique(unlist(geneset_ids[cur.res]))
-    not.covered.genes <- setdiff(cur.genes, covered.genes)
+    not.covered.genes <- dplyr::setdiff(cur.genes, covered.genes)
   }
   return(not.covered.genes)
 }

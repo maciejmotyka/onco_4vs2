@@ -1,9 +1,18 @@
 sumerWeightedSetCover <- function(config_file, output_dir, n_threads = 4) {
   full_config <- check_config(config_file)
 
-  if (!dir.exists(output_dir)) {
+  ## Make sure that the output directory exists and is empty
+  if(dir.exists(output_dir)) {
+    overwrite <- readline(prompt = "Output directory not empty, do you want to overwrite existing output? (enter Y or N)")
+    if(toupper(overwrite) != "Y"){
+      return(0)
+    } else {
+      unlink(output_dir, recursive = T)
+      dir.create(output_dir)
+    }
+  } else {
     dir.create(output_dir)
-  }
+    }
 
   config <- full_config$data
   n_platform <- nrow(config)
@@ -81,10 +90,12 @@ check_config <- function(config_file) {
   return(old_config)
 }
 
-# convert list of gene names to gmt file
-# each list component has a gene set name
-# the value of each list item is an array of gene names/ids
-list2gmt <- function(rlist, out_file) {
-  m <- do.call(rbind, lapply(seq_along(rlist), function(i) paste(c(names(rlist)[[i]],"", rlist[[i]]), collapse="\t")))
-  write.table(m,file=out_file, quote=FALSE, col.names=FALSE, row.names=FALSE)
+gmt2list <- function(gmt_file){
+  if (!file.exists(gmt_file)) {
+    stop("There is no such gmt file.")
+  }
+  x <- scan(gmt_file, what="character", sep="\n", quiet=TRUE, strip.white = T) # added strip.white=T to remove the trailing tabs in my gmt files
+  y <- strsplit(x, "\t")
+  names(y) <- sapply(y, `[[`, 1)
+  gmt_list <- lapply(y, `[`, c(-1,-2))
 }
