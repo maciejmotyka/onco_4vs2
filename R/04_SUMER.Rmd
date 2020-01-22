@@ -252,7 +252,6 @@ if(!dir.exists(here("output", "SUMER"))){
 
 ## Run Weighted Set Cover and Affinity Propagation one project at a time
 projects <- c("kegg", "wp", "react", "brca", "coadread", "luad", "prad")
-
 for (project in projects) {
   print(paste("Now processing:", project))
   sumerWeightedSetCover(config_file = here("analysis", "SUMER", "configs", paste0(project, "_config.json")),
@@ -261,7 +260,7 @@ for (project in projects) {
                         project = project,
                         n_threads = 8)
 }
-  ## If you get the following error when executing Weighted Set Cover, make more RAM available and/or decrease n_threads 
+   ## If you get the following error when executing Weighted Set Cover, make more RAM available and/or decrease n_threads 
     # In addition: Warning message:
     # In parallel::mclapply(seq(nrow(candidates)), function(row, candidates,  :
     #   all scheduled cores encountered errors in user code
