@@ -19,6 +19,7 @@ library(conflicted)
 conflict_prefer("select", "tidylog")
 conflict_prefer("mutate", "tidylog")
 conflict_prefer("left_join", "tidylog")
+conflict_prefer("rename_all", "tidylog")
 ```
 
 ### Function definitions
@@ -236,9 +237,9 @@ makeFullGmt(coadread_react, react_gmt_3col, "coadread-react.gmt")
 makeFullGmt(coadread_wp, wp_gmt_3col, "coadread-wp.gmt")
 ```
 
-# SUMER step 1 - select representative pathways with Weighted Set Cover
+# SUMER - select representative pathways with Weighted Set Cover and cluster them with Affinity Propagation
 ```{r}
-# Source scripts needed by sumer step 1
+# Source scripts needed by SUMER
 source(here("R/sumerMM.R")) # my own version of sumer.R
 source(here("R/utils.R")) # defines: computeNodeDim, gmt2list, check_config
 source(here("R/topGeneSets.R"))# defines: uuid.gen and topGeneSets
@@ -250,7 +251,7 @@ if(!dir.exists(here("output", "SUMER"))){
   dir.create(here("output", "SUMER"))
 }
 
-## Run Weighted Set Cover and Affinity Propagation one project at a time
+## Run Weighted Set Cover and Affinity Propagation, one project at a time
 projects <- c("kegg", "wp", "react", "brca", "coadread", "luad", "prad")
 for (project in projects) {
   print(paste("Now processing:", project))
@@ -264,4 +265,71 @@ for (project in projects) {
     # In addition: Warning message:
     # In parallel::mclapply(seq(nrow(candidates)), function(row, candidates,  :
     #   all scheduled cores encountered errors in user code
+
+rm(list = ls())
+```
+
+# Preapare node tables for cytoscape
+## Read the ap_sumer.json files into a list
+```{r}
+## Get the paths of all ap_sumer.json files, name them with project names and read into a list
+file_names <- dir(here("output", "SUMER"), pattern = ".json", include.dirs = T, recursive = T) %>% str_remove("/ap_sumer.json")
+file_paths <- dir(here("output", "SUMER"), pattern = ".json", include.dirs = T, recursive = T, full.names = T)
+names(file_paths) <- file_names
+
+jsons <- list()
+for (name in names(file_paths)) {
+  jsons[name] <- jsonlite::fromJSON(file_paths[name], flatten = T)
+}
+rm(file_names); rm(file_paths); rm(name)
+```
+
+## Define function for cleaning json files
+```{r}
+## extract the nodelist; create platform_name column; create pathway_name column
+makeNodeTable <- function(file) {
+  rename_all(file, ~str_remove(., "data.")) %>% 
+  filter(is.na(source)) %>% 
+  select(id, "platform_name" = platform, "score" = signP, nSize, color, is_exemplar) %>%
+  mutate(platform_name = case_when(str_starts(id, "kg_") ~ "KEGG",
+                              str_starts(id, "wp_") ~ "WikiPathways",
+                              str_starts(id, "rct_") ~ "Reactome",
+                              str_starts(id, "b_") ~ "brca",
+                              str_starts(id, "p_") ~ "prad",
+                              str_starts(id, "l_") ~ "luad",
+                              str_starts(id, "cr_") ~ "coadread")) %>%
+  mutate("pathway_name" = str_remove(id, "kg_|wp_|rct_|b_|p_|l_|cr_"))
+}
+```
+ 
+```{r}
+## extract the nodelist; create platform_name column; create pathway_name column
+makeEdgeTable <- function(file) {
+  rename_all(file, ~str_remove(., "data.")) %>% 
+  filter(!is.na(source)) %>% 
+  select(source, target)
+}
+``` 
+ 
+## Clean and save the files
+```{r}
+## clean the json files
+clean_nodes <- map(jsons, ~makeNodeTable(.))
+
+## clean the json files
+clean_edges <- map(jsons, ~makeEdgeTable(.))
+
+## write the clean json files
+output_dir <- here("output", "files_for_cytoscape")
+
+if(!dir.exists(output_dir)){
+  dir.create(output_dir)
+}
+
+## Write clean node-tables to .tsv
+map2(.x = clean_nodes, .y = names(clean_nodes),
+     ~write_tsv(.x, paste0(output_dir, "/", .y, "_nodes.tsv")))
+
+map2(.x = clean_edges, .y = names(clean_edges),
+     ~write_tsv(.x, paste0(output_dir, "/", .y, "_edges.tsv")))
 ```
