@@ -20,6 +20,8 @@ conflict_prefer("select", "tidylog")
 conflict_prefer("mutate", "tidylog")
 conflict_prefer("left_join", "tidylog")
 conflict_prefer("rename_all", "tidylog")
+conflict_prefer("mutate_all", "tidylog")
+conflict_prefer("filter", "tidylog")
 ```
 
 ### Function definitions
@@ -281,7 +283,6 @@ jsons <- list()
 for (name in names(file_paths)) {
   jsons[name] <- jsonlite::fromJSON(file_paths[name], flatten = T)
 }
-rm(file_names); rm(file_paths); rm(name)
 ```
 
 ## Define function for cleaning json files
@@ -332,4 +333,261 @@ map2(.x = clean_nodes, .y = names(clean_nodes),
 
 map2(.x = clean_edges, .y = names(clean_edges),
      ~write_tsv(.x, paste0(output_dir, "/", .y, "_edges.tsv")))
+```
+
+# Prepare result tables
+## Read in Sumer results
+```{r}
+sumer_outdir <- here("output", "SUMER")
+pattern <-  "ap_sumer_nodelist.txt"
+
+file_names <- list.files(sumer_outdir, pattern = pattern, include.dirs = T, recursive = T) %>% str_remove(str_c("/", pattern))
+files <- list.files(sumer_outdir, pattern = pattern, include.dirs = T, recursive = T, full.names = T)
+names(files) <- file_names
+
+nodelists <- lapply(files, read_tsv)
+```
+
+## Prepare data for making tables
+<!-- ### Clan data -->
+<!-- ```{r} -->
+<!-- clean_data <- map(nodelists, ~select(.,name, platform)) %>%  -->
+<!--   map(~mutate(.,"name" = str_remove(.$name,"wp_|kg_|rct_|b_|cr_|p_|l_"))) -->
+<!-- ``` -->
+
+### Prepare per cancer sorted df
+```{r}
+cancers <- rowr::cbind.fill(
+  clean_nodes$brca$pathway_name,
+  clean_nodes$brca$platform_name,
+  clean_nodes$coadread$pathway_name,
+  clean_nodes$coadread$platform_name,
+  clean_nodes$prad$pathway_name,
+  clean_nodes$prad$platform_name,
+  clean_nodes$luad$pathway_name,
+  clean_nodes$luad$platform_name,
+  fill = NA_character_) %>%
+  set_names("BRCA",
+            "brca_db",
+            "COADREAD",
+            "coadread_db",
+            "LUAD",
+            "luad_db",
+            "PRAD",
+            "prad_db")
+
+## Sort each cancer pathways alphabecticaly
+brca_sorted <- cancers %>% select(BRCA, brca_db) %>% arrange_all()
+coadread_sorted <- cancers %>% select(COADREAD, coadread_db) %>% arrange_all()
+luad_sorted <- cancers %>% select(LUAD, luad_db) %>% arrange_all()
+prad_sorted <- cancers %>% select(PRAD, prad_db) %>% arrange_all()
+
+cancers_sorted <- bind_cols(brca_sorted, coadread_sorted, luad_sorted, prad_sorted) %>% 
+  mutate_all(~as.character(.)) %>% 
+  replace(is.na(.), "")
+```
+
+### Prepare per database sorted df
+```{r}
+## make a dataframe
+databases <- rowr::cbind.fill(clean_nodes$kegg$pathway_name,
+                              clean_nodes$kegg$platform_name,
+                              clean_nodes$react$pathway_name,
+                              clean_nodes$react$platform_name,
+                              clean_nodes$wp$pathway_name,
+                              clean_nodes$wp$platform_name,
+                              fill = NA_character_) %>% 
+  set_names("KEGG", "kegg_db","Reactome", "react_db", "WikiPathways", "wp_db")
+
+## sort the dataframe
+kegg_sorted <- databases %>% select(KEGG, kegg_db) %>% arrange_all()
+react_sorted <- databases %>% select(Reactome, react_db) %>% arrange_all()
+wp_sorted <- databases %>% select(WikiPathways, wp_db) %>% arrange_all()
+
+databases_sorted <- bind_cols(kegg_sorted, react_sorted, wp_sorted) %>% 
+  mutate_all(~as.character(.)) %>% 
+  replace(is.na(.), "")
+```
+
+## Eplore the data
+### Per cancer
+```{r}
+venn_cancers <- gplots::venn(
+  list(
+    "BRCA" = paste(na.omit(cancers$BRCA), na.omit(cancers$brca_db)),
+    "COADREAD" = paste(na.omit(cancers$COADREAD), na.omit(cancers$coadread_db)),
+    "LUAD" = paste(na.omit(cancers$LUAD), na.omit(cancers$luad_db)),
+    "PRAD" = paste(na.omit(cancers$PRAD), na.omit(cancers$prad_db))
+  ),
+)
+
+attr(venn_cancers, "intersections")
+```
+
+## Make table with gt
+### Cancers
+```{r}
+# install.packages("remotes")
+# remotes::install_github("rstudio/gt")
+# install.packages("webshot")
+library(gt)
+
+# RColorBrewer::brewer.pal(3, "Set2")
+# "#66C2A5" "#FC8D62" "#8DA0CB"
+# green     orange    blue
+# kegg      reactome  wp 
+
+tbl_cancers <- cancers_sorted %>%
+  gt() %>% 
+  cols_hide(vars(brca_db, coadread_db, luad_db, prad_db)) %>% 
+  tab_header(
+    title = md("Pathways per cancer"),
+    subtitle = md("Colored by database")
+  ) %>% # color brca
+  tab_style(
+    style = gt::cell_fill("#66C2A5", 0.3),
+    locations = cells_body(columns = vars(BRCA),
+                           rows = brca_db == "KEGG")
+    ) %>% 
+  tab_style(
+    style = gt::cell_fill("#8DA0CB", 0.3),
+    locations = cells_body(columns = vars(BRCA),
+                           rows = brca_db == "Reactome")
+    ) %>% 
+  tab_style(
+    style = gt::cell_fill("#FC8D62", 0.3),
+    locations = cells_body(columns = vars(BRCA),
+                           rows =  brca_db == "WikiPathways")
+  ) %>% # color coadread
+  tab_style(
+    style = gt::cell_fill("#66C2A5", 0.3),
+    locations = cells_body(columns = vars(COADREAD),
+                           rows = coadread_db == "KEGG")
+    ) %>% 
+  tab_style(
+    style = gt::cell_fill("#8DA0CB", 0.3),
+    locations = cells_body(columns = vars(COADREAD),
+                           rows = coadread_db == "Reactome")
+    ) %>% 
+  tab_style(
+    style = gt::cell_fill("#FC8D62", 0.3),
+    locations = cells_body(columns = vars(COADREAD),
+                           rows =  coadread_db == "WikiPathways")
+  ) %>% # color luad
+  tab_style(
+    style = gt::cell_fill("#66C2A5", 0.3),
+    locations = cells_body(columns = vars(LUAD),
+                           rows = luad_db == "KEGG")
+    ) %>% 
+  tab_style(
+    style = gt::cell_fill("#8DA0CB", 0.3),
+    locations = cells_body(columns = vars(LUAD),
+                           rows = luad_db == "Reactome")
+    ) %>% 
+  tab_style(
+    style = gt::cell_fill("#FC8D62", 0.3),
+    locations = cells_body(columns = vars(LUAD),
+                           rows =  luad_db == "WikiPathways")
+  ) %>% # color prad
+  tab_style(
+    style = gt::cell_fill("#66C2A5", 0.3),
+    locations = cells_body(columns = vars(PRAD),
+                           rows = prad_db == "KEGG")
+    ) %>% 
+  tab_style(
+    style = gt::cell_fill("#8DA0CB", 0.3),
+    locations = cells_body(columns = vars(PRAD),
+                           rows = prad_db == "Reactome")
+    ) %>% 
+  tab_style(
+    style = gt::cell_fill("#FC8D62", 0.3),
+    locations = cells_body(columns = vars(PRAD),
+                           rows =  prad_db == "WikiPathways")
+    )
+
+tbl_cancers
+# gtsave(tbl_cancers, filename = "table_cancers.pdf", path = here("output"))
+gtsave(tbl_cancers, filename = "table_cancers.png", path = here("output"))
+# Returns an error, but saves the file.
+# TypeError: Attempting to change the setter of an unconfigurable property.
+```
+
+### Databases
+```{r}
+# RColorBrewer::brewer.pal(4, "Set2")
+# "#66C2A5" "#FC8D62" "#8DA0CB" "#E78AC3"
+# green     orange    blue      magenta
+# brca      coadread  luad      prad
+
+tbl_databases <- databases_sorted %>%
+  gt() %>% 
+  cols_hide(vars(kegg_db, wp_db, react_db)) %>% 
+  tab_header(
+    title = md("Pathways per database"),
+    subtitle = md("Colored by cancer")
+  ) %>% # color kegg
+  tab_style(
+    style = gt::cell_fill("#66C2A5", 0.3),
+    locations = cells_body(columns = vars(KEGG),
+                           rows = kegg_db == "brca")
+    ) %>% 
+  tab_style(
+    style = gt::cell_fill("#FC8D62", 0.3),
+    locations = cells_body(columns = vars(KEGG),
+                           rows =  kegg_db == "coadread")
+    ) %>% 
+  tab_style(
+    style = gt::cell_fill("#8DA0CB", 0.3),
+    locations = cells_body(columns = vars(KEGG),
+                           rows = kegg_db == "luad")
+  ) %>% 
+  tab_style(
+    style = gt::cell_fill("#E78AC3", 0.3),
+    locations = cells_body(columns = vars(KEGG),
+                           rows =  kegg_db == "prad")
+  ) %>% # color wp
+  tab_style(
+    style = gt::cell_fill("#66C2A5", 0.3),
+    locations = cells_body(columns = vars(WikiPathways),
+                           rows = wp_db == "brca")
+    ) %>% 
+  tab_style(
+    style = gt::cell_fill("#FC8D62", 0.3),
+    locations = cells_body(columns = vars(WikiPathways),
+                           rows =  wp_db == "coadread")
+    ) %>% 
+  tab_style(
+    style = gt::cell_fill("#8DA0CB", 0.3),
+    locations = cells_body(columns = vars(WikiPathways),
+                           rows = wp_db == "luad")
+  ) %>% 
+  tab_style(
+    style = gt::cell_fill("#E78AC3", 0.3),
+    locations = cells_body(columns = vars(WikiPathways),
+                           rows =  wp_db == "prad")
+  ) %>% # color react
+  tab_style(
+    style = gt::cell_fill("#66C2A5", 0.3),
+    locations = cells_body(columns = vars(Reactome),
+                           rows = react_db == "brca")
+    ) %>% 
+  tab_style(
+    style = gt::cell_fill("#FC8D62", 0.3),
+    locations = cells_body(columns = vars(Reactome),
+                           rows =  react_db == "coadread")
+    ) %>% 
+  tab_style(
+    style = gt::cell_fill("#8DA0CB", 0.3),
+    locations = cells_body(columns = vars(Reactome),
+                           rows = react_db == "luad")
+  ) %>% 
+  tab_style(
+    style = gt::cell_fill("#E78AC3", 0.3),
+    locations = cells_body(columns = vars(Reactome),
+                           rows =  react_db == "prad")
+    )
+
+tbl_databases
+# gtsave(tbl_databases, filename = "table_databases.pdf", path = here("output"))
+gtsave(tbl_databases, filename = "table_databases.png", path = here("output"))
 ```

@@ -14,6 +14,15 @@ editor_options:
 library(here)
 library(tidyverse)
 library(tidylog)
+library(conflicted)
+conflict_prefer("select", "tidylog")
+conflict_prefer("left_join", "tidylog")
+conflict_prefer("filter_at", "tidylog")
+conflict_prefer("semi_join", "tidylog")
+conflict_prefer("distinct", "tidylog")
+conflict_prefer("mutate", "tidylog")
+conflict_prefer("filter_all", "tidylog")
+conflict_prefer("filter", "tidylog")
 ```
 
 ### Download and read in the gene counts from recount2
@@ -39,16 +48,12 @@ recount2_counts <- recount2_counts %>%
   ## remove the version part of the Ensembl ids
   mutate(gene_id = str_remove(gene_id, "\\.\\w*$"))
 
-recount2_ensg_ids <- recount2_counts %>% dplyr::select(gene_id)
+recount2_ensg_ids <- recount2_counts %>% select(gene_id)
 
 ## Query the Ensembl Biomart for protein coding genes
 hsapiens_gene_ensembl = biomaRt::useMart(biomart = "ensembl", dataset = "hsapiens_gene_ensembl")
 
-protein_coding <- biomaRt::getBM(attributes=c("ensembl_gene_id",
-                                              "entrezgene_id",
-                                              "entrezgene_accession",
-                                              "hgnc_symbol"
-                                              ),
+protein_coding <- biomaRt::getBM(attributes=c("ensembl_gene_id", "entrezgene_id"),
                                  filters = c("ensembl_gene_id","biotype"),
                                  values=list(purrr::as_vector(recount2_ensg_ids),
                                              "protein_coding"),
@@ -104,15 +109,16 @@ dds <- DESeq2::DESeq(dds)
 ```{r}
 res4vs2 <- DESeq2::results(dds, contrast = c("stage", "RAS", "hTERT"), lfcThreshold = 1, alpha = 0.01)
 DESeq2::summary(res4vs2)
-  # 639 up-regulated, 1329 down-regulated, 1968 total
+     # 639 up-regulated, 1329 down-regulated, 1968 total
 
 degs_4vs2 <- data.frame(res4vs2) %>% rownames_to_column("gene_id") %>% filter(padj < 0.01)
 ```
 
 ## Clean up
 ```{r}
-varhandle::rm.all.but(keep = c("degs_4vs2", "protein_coding"))
-varhandle::save.var(path = here("analysis"), varlist = c("degs_4vs2", "protein_coding"))
+degs_4vs2 %>% write_tsv(here("output", "degs_4vs2"))
+varhandle::rm.all.but(keep = c("degs_4vs2", "dds"))
+varhandle::save.var(path = here("analysis"), varlist = c("degs_4vs2", "dds"))
 ```
 
 

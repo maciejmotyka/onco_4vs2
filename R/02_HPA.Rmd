@@ -14,6 +14,16 @@ editor_options:
 library(here)
 library(tidyverse)
 library(tidylog)
+library(conflicted)
+conflict_prefer("filter", "tidylog")
+conflict_prefer("drop_na", "tidylog")
+conflict_prefer("inner_join", "tidylog")
+conflict_prefer("count", "tidylog")
+conflict_prefer("intersect", "dplyr")
+conflict_prefer("mutate", "tidylog")
+conflict_prefer("select", "tidylog")
+conflict_prefer("distinct", "tidylog")
+conflict_prefer("inner_join", "tidylog")
 ```
 
 ## Download normal and pathology datasets downloaded from HPA
@@ -51,7 +61,7 @@ filterNormal <- function(genes, normal_data){
 
 filterCancer <- function(genes, cancer_data){
   cancer_data %>%
-  dplyr::select(gene:not_detected) %>% 
+  select(gene:not_detected) %>% 
   mutate(cancer = str_remove(cancer, pattern = " cancer")) %>% 
   filter(cancer %in% c("colorectal",
                        "prostate",
@@ -59,7 +69,7 @@ filterCancer <- function(genes, cancer_data){
                        "lung")) %>% 
   filter(gene %in% genes) %>%
   drop_na(high:not_detected) %>%
-  mutate(n_samples = rowSums(dplyr::select(., high:not_detected)))
+  mutate(n_samples = rowSums(select(., high:not_detected)))
 }
 
 ## Filter the up-regulated genes
@@ -86,7 +96,7 @@ checkIfUpregulated <- function(tissue_type,
                                cancer_data = cancer_data_for_up)
   {
   inner_join(normal_data, cancer_data, by = "gene") %>%
-    dplyr::select(gene, gene_name = gene_name.x, tissue, cancer, level, high:not_detected, n_samples) %>% 
+    select(gene, gene_name = gene_name.x, tissue, cancer, level, high:not_detected, n_samples) %>% 
     mutate(samples_up = case_when(level == "High" ~ 0,
                                    level == "Medium" ~ as.double(high),
                                    level == "Low" ~ as.double(high+medium),
@@ -102,7 +112,7 @@ checkIfUpregulated <- function(tissue_type,
     filter(samples_up >= 0.5 * n_samples) %>% 
     filter(tissue == tissue_type) %>% 
     filter(cancer == cancer_type) %>%
-    dplyr::select(gene, gene_name) %>% 
+    select(gene, gene_name) %>% 
     arrange(gene_name)
 }
 
@@ -112,7 +122,7 @@ checkIfDownregulated <- function(tissue_type,
                                  cancer_data = cancer_data_for_down)
   {
   inner_join(normal_data, cancer_data, by = "gene") %>%
-    dplyr::select(gene, gene_name = gene_name.x, tissue, cancer, level, high:not_detected, n_samples) %>% 
+    select(gene, gene_name = gene_name.x, tissue, cancer, level, high:not_detected, n_samples) %>% 
     mutate(samples_down = case_when(level == "High" ~ 0,
                                    level == "Medium" ~ as.double(high),
                                    level == "Low" ~ as.double(high+medium),
@@ -128,7 +138,7 @@ checkIfDownregulated <- function(tissue_type,
     filter(samples_down >= 0.5 * n_samples) %>% 
     filter(tissue == tissue_type) %>% 
     filter(cancer == cancer_type) %>% 
-    dplyr::select(gene, gene_name) %>% 
+    select(gene, gene_name) %>% 
     arrange(gene_name)
 }
 ```
@@ -136,12 +146,11 @@ checkIfDownregulated <- function(tissue_type,
 ### Check for up-regulation
 ```{r}
 breast_up <- checkIfUpregulated(tissue_type = "breast", cancer_type = "breast") # 64
-prostate_up <- checkIfUpregulated(tissue_type = "prostate", cancer_type = "prostate") # 72
-lung_up <- checkIfUpregulated(tissue_type = "lung", cancer_type = "lung") # 104
 colon_up <- checkIfUpregulated(tissue_type = "colon", cancer_type = "colorectal") # 66
 rectum_up <- checkIfUpregulated(tissue_type = "rectum", cancer_type = "colorectal") # 64
-
 colorectal_up <- semi_join(colon_up, rectum_up) %>% arrange(gene_name) # 54
+lung_up <- checkIfUpregulated(tissue_type = "lung", cancer_type = "lung") # 104
+prostate_up <- checkIfUpregulated(tissue_type = "prostate", cancer_type = "prostate") # 72
 ```
 
 ### Create a Venn diagram of up-regulated genes
@@ -161,12 +170,11 @@ bind_rows(breast_up, colorectal_up, lung_up, prostate_up) %>% distinct() %>% cou
 ### Check for down-regulation
 ```{r}
 breast_down <- checkIfDownregulated(tissue_type = "breast", cancer_type = "breast") # 239
-prostate_down <- checkIfDownregulated(tissue_type = "prostate", cancer_type = "prostate") # 265
-lung_down <- checkIfDownregulated(tissue_type = "lung", cancer_type = "lung") # 218
 colon_down <- checkIfDownregulated(tissue_type = "colon", cancer_type = "colorectal") # 305
 rectum_down <- checkIfDownregulated(tissue_type = "rectum", cancer_type = "colorectal") # 319
-
 colorectal_down <- semi_join(colon_down, rectum_down) %>% arrange(gene_name)# 258
+lung_down <- checkIfDownregulated(tissue_type = "lung", cancer_type = "lung") # 218
+prostate_down <- checkIfDownregulated(tissue_type = "prostate", cancer_type = "prostate") # 265
 ```
 
 ### Create a Venn diagram of down-regulated genes
@@ -181,24 +189,6 @@ common_down <- attr(venn_down, "intersections")$`BRCA:COADREAD:LUAD:PRAD`
   # 29 proteins down-regulated in all 4 cancers
 bind_rows(breast_down, colorectal_down, lung_down, prostate_down) %>% distinct() %>% count()
   # there are 552 uniqe down-regulated proteins 
-```
-
-### Create a dataframe with all DEGs
-```{r}
-degs_breast <-
-  list("up" = breast_up, "down" = breast_down) %>% bind_rows(.id = "change")
-degs_colorectal <-
-  list("up" = colorectal_up, "down" = colorectal_down) %>% bind_rows(.id = "change")
-degs_lung <-
-  list("up" = lung_up, "down" = lung_down) %>% bind_rows(.id = "change")
-degs_prostate <-
-  list("up" = prostate_up, "down" = prostate_down) %>% bind_rows(.id = "change")
-
-all_degs_HPA <- list("BRCA" = degs_breast,
-                     "COADREAD" = degs_colorectal,
-                     "LUAD" = degs_lung,
-                     "PRAD" = degs_prostate) %>%
-  bind_rows(.id = "cancer")
 ```
 
 ### Create Venn diagram for all DEGs
@@ -236,6 +226,35 @@ cgc <- read_tsv(here("data", "Census_allSun Jan 19 20_33_11 2020.tsv"))
 cgc %>% filter_at("Gene Symbol", any_vars(. %in% common_degs)) # CD74, PBX1
 ```
 
+## Save results to .xlsx file and clean up
+```{r}
+mapping_ensg2HGNC <- bind_rows(breast_up, breast_down, colorectal_up, colorectal_down, lung_up, lung_down, prostate_up, prostate_down) %>% distinct()
+
+has_HPA_data <- c(intersect(normal_data_for_up$gene, cancer_data_for_up$gene), intersect(normal_data_for_down$gene, cancer_data_for_down$gene))
+
+degs_4vs2 %>%
+  inner_join(mapping_ensg2HGNC, by = c("gene_id" = "gene")) %>% 
+  select(-(3:7)) %>% 
+  mutate("brca_up" = case_when(gene_id %in% breast_up$gene ~ "Yes")) %>%
+  mutate("coadread_up" = case_when(gene_id %in% colorectal_up$gene ~ "Yes")) %>%
+  mutate("luad_up" = case_when(gene_id %in% lung_up$gene ~ "Yes")) %>%
+  mutate("prad_up" = case_when(gene_id %in% prostate_up$gene ~ "Yes")) %>%
+  mutate("brca_down" = case_when(gene_id %in% breast_down$gene ~ "Yes")) %>%
+  mutate("coadread_down" = case_when(gene_id %in% colorectal_down$gene ~ "Yes")) %>%
+  mutate("luad_down" = case_when(gene_id %in% lung_down$gene ~ "Yes")) %>%
+  mutate("prad_down" = case_when(gene_id %in% prostate_down$gene ~ "Yes")) %>%
+  mutate("n_cancers_w_change" = rowSums(.[4:11] == "Yes", na.rm = T)) %>%  # how many cancers have this protein altered
+  mutate("in_CGC" = case_when(gene_name %in% cgc$`Gene Symbol` ~ "Yes")) %>% # check if in CGC
+  select("ensg_id" = gene_id,
+         "gene_symbol" = gene_name,
+         "transcript_l2fc" = log2FoldChange,
+         n_cancers_w_change,
+         in_CGC,
+         everything()) #%>% 
+  degs_4vs2_after_HPA %>% 
+  write_tsv(here("output", "degs_4vs2_after_HPA.tsv"))
+```
+
 ## Save the DEGs to a .tsv file
 ```{r}
 rowr::cbind.fill(breast_up$gene_name,
@@ -256,7 +275,7 @@ rowr::cbind.fill(breast_up$gene_name,
 
 ## Clean up
 ```{r}
-varhandle::rm.all.but(keep = c("all_degs_HPA", "protein_coding"), keep_functions = F)
+varhandle::rm.all.but(keep = c("all_degs_HPA"), keep_functions = F)
 varhandle::save.var(path = here("analysis"), varlist = "all_degs_HPA")
 ```
 

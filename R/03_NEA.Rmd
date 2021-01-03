@@ -343,31 +343,31 @@ significantPerCancer <- function(nea_results ,cancer, threshold) {
 ```
 
 ### Clean the results and extract significant pathways
-#### WikiPathways
-```{r}
-res_nea_wp <- nea_wp %>% extractNeaResults()
-brca_wp <- res_nea_wp %>% significantPerCancer("brca", 0.01) # 130; 215
-luad_wp <- res_nea_wp %>% significantPerCancer("luad", 0.01) # 218; 156
-prad_wp <- res_nea_wp %>% significantPerCancer("prad", 0.01) # 243; 194
-coadread_wp <- res_nea_wp %>% significantPerCancer("coadread", 0.01) # 110; 200
-```
-
 #### KEGG
 ```{r}
 res_nea_kegg <- nea_kegg %>% extractNeaResults()
 brca_kegg <- res_nea_kegg %>% significantPerCancer("brca", 0.01) # 133; 193
+coadread_kegg <- res_nea_kegg %>% significantPerCancer("coadread", 0.01) # 100; 187
 luad_kegg <- res_nea_kegg %>% significantPerCancer("luad", 0.01) # 134; 132
 prad_kegg <- res_nea_kegg %>% significantPerCancer("prad", 0.01) # 182; 184
-coadread_kegg <- res_nea_kegg %>% significantPerCancer("coadread", 0.01) # 100; 187
 ```
 
 #### Reactome
 ```{r}
 res_nea_react <- nea_react %>% extractNeaResults()
 brca_react <- res_nea_react %>% significantPerCancer("brca", 0.01) # 281; 486
+coadread_react <- res_nea_react %>% significantPerCancer("coadread", 0.01) # 242; 322
 luad_react <- res_nea_react %>% significantPerCancer("luad", 0.01) # 516; 253
 prad_react <- res_nea_react %>% significantPerCancer("prad", 0.01) # 395; 364
-coadread_react <- res_nea_react %>% significantPerCancer("coadread", 0.01) # 242; 322
+```
+
+#### WikiPathways
+```{r}
+res_nea_wp <- nea_wp %>% extractNeaResults()
+brca_wp <- res_nea_wp %>% significantPerCancer("brca", 0.01) # 130; 215
+coadread_wp <- res_nea_wp %>% significantPerCancer("coadread", 0.01) # 110; 200
+luad_wp <- res_nea_wp %>% significantPerCancer("luad", 0.01) # 218; 156
+prad_wp <- res_nea_wp %>% significantPerCancer("prad", 0.01) # 243; 194
 ```
 
 ## Create Venn diagrams of enriched pathways for each database and extract pathways common to all 4 cancers
@@ -387,22 +387,6 @@ bind_rows(brca_kegg, coadread_kegg, prad_kegg, luad_kegg) %>% distinct(pathway_n
   # 220; There are 252 unique enriched KEGG pathways 
 ```
 
-### WikiPathways
-```{r}
-venn_wp <- gplots::venn(
-  list(
-    "BRCA" = brca_wp$pathway_name,
-    "COADREAD" = coadread_wp$pathway_name,
-    "LUAD" = luad_wp$pathway_name,
-    "PRAD" = prad_wp$pathway_name
-  )
-)
-common_wp <- attr(venn_wp, "intersections")$`BRCA:COADREAD:LUAD:PRAD`
-  # 106 pathways are common to all 4 cancers
-bind_rows(brca_wp, coadread_wp, prad_wp, luad_wp) %>% distinct(pathway_name) %>% count()
-  # 294; There are 294 unique enriched WikiPathways pathways
-```
-
 ### Reactome
 ```{r}
 venn_react <- gplots::venn(
@@ -417,6 +401,22 @@ common_react <- attr(venn_react, "intersections")$`BRCA:COADREAD:LUAD:PRAD`
   # 119 pathways are common to all 4 cancers
 bind_rows(brca_react, coadread_react, prad_react, luad_react) %>% distinct(pathway_name) %>% count()
   # There are 695 unique enriched Reactome pathways
+```
+
+### WikiPathways
+```{r}
+venn_wp <- gplots::venn(
+  list(
+    "BRCA" = brca_wp$pathway_name,
+    "COADREAD" = coadread_wp$pathway_name,
+    "LUAD" = luad_wp$pathway_name,
+    "PRAD" = prad_wp$pathway_name
+  )
+)
+common_wp <- attr(venn_wp, "intersections")$`BRCA:COADREAD:LUAD:PRAD`
+  # 106 pathways are common to all 4 cancers
+bind_rows(brca_wp, coadread_wp, prad_wp, luad_wp) %>% distinct(pathway_name) %>% count()
+  # 294; There are 298 unique enriched WikiPathways pathways
 ```
 
 ## Place the 3 Venn diagrams on one figure
